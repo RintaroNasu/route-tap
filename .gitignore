@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Local environment variables (keep shareable examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Xcode user settings and generated output
+xcuserdata/
+*.xcuserstate
+/ios/DerivedData/
+/ios/build/
+*.xcresult
+
+# Swift Package Manager build output
+.build/
+
+# Go binaries and generated output
+/api/server
+/api/cmd/server/server
+/api/bin/
+/api/build/
+/api/tmp/
+*.test
+/api/coverage.out
+/api/coverage.html
