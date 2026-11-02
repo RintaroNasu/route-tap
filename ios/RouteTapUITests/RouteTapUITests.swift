@@ -1,41 +1,37 @@
-//
-//  RouteTapUITests.swift
-//  RouteTapUITests
-//
-//  Created by 那須凜太郎 on 2026/10/13.
-//
-
 import XCTest
 
 final class RouteTapUITests: XCTestCase {
-
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
-        continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
-    @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
-        app.launch()
-
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-    }
-
-    @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
-        }
-    }
+	@MainActor
+	func testLoginSignupSwitchAndValidation() throws {
+		continueAfterFailure = false
+		XCUIDevice.shared.orientation = .portrait
+		let app = XCUIApplication()
+		// Isolate the UI test Keychain namespace from the developer's session.
+		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = "http://127.0.0.1:9"
+		app.launch()
+		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
+		XCTAssertEqual(app.staticTexts["auth.heading"].label, "ログイン")
+		XCTAssertTrue(app.staticTexts["RouteTap"].exists)
+		app.buttons["auth.submit"].tap()
+		XCTAssertTrue(app.staticTexts["auth.error"].exists)
+		let login = XCTAttachment(screenshot: app.screenshot())
+		login.name = "ログイン"
+		login.lifetime = .keepAlways
+		add(login)
+		app.buttons["auth.switch"].tap()
+		XCTAssertEqual(app.staticTexts["auth.heading"].label, "新規登録")
+		XCTAssertFalse(app.staticTexts["auth.error"].exists)
+		XCTAssertTrue(app.buttons["auth.submit"].label.contains("アカウントを作成"))
+		XCTAssertFalse(app.buttons["パスワードを忘れた方"].exists)
+		let signup = XCTAttachment(screenshot: app.screenshot())
+		signup.name = "新規登録"
+		signup.lifetime = .keepAlways
+		add(signup)
+		app.buttons["パスワードを表示"].tap()
+		XCTAssertTrue(app.textFields["auth.password"].exists)
+		app.buttons["パスワードを隠す"].tap()
+		XCTAssertTrue(app.secureTextFields["auth.password"].exists)
+		app.buttons["auth.switch"].tap()
+		XCTAssertEqual(app.staticTexts["auth.heading"].label, "ログイン")
+	}
 }

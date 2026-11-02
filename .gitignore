@@ -26,3 +26,7 @@ xcuserdata/
 *.test
 /api/coverage.out
 /api/coverage.html
+
+# Local Xcode build server configuration (contains machine-specific paths)
+/buildServer.json
+/.compile
