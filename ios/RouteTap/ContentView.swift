@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-	@StateObject private var auth = AuthModel()
+	@StateObject private var auth = AuthViewModel()
 
 	var body: some View {
 		Group {
@@ -9,7 +9,7 @@ struct ContentView: View {
 			case .restoring:
 				ProgressView("ログイン状態を確認中…")
 			case .signedOut:
-				AuthView(model: auth)
+				AuthView(viewModel: auth)
 			case .unavailable:
 				VStack(spacing: 20) {
 					Image(systemName: "wifi.exclamationmark").font(.largeTitle)
