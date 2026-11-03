@@ -9,4 +9,5 @@ type User struct {
 	PasswordHash string `gorm:"not null;check:password_hash_not_empty,password_hash <> ''" json:"-"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	SavedRoutes  []SavedRoute `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
