@@ -87,6 +87,17 @@ final class AuthViewModel: ObservableObject {
 		} catch { errorMessage = error.localizedDescription }
 	}
 
+	func expireSession() {
+		do {
+			try tokens.delete()
+			state = .signedOut
+			errorMessage = "ログインの有効期限が切れました。再度ログインしてください。"
+		} catch {
+			state = .unavailable
+			errorMessage = error.localizedDescription
+		}
+	}
+
 	func clearError() { errorMessage = nil }
 
 	private func loadUser(token: String) async throws {
