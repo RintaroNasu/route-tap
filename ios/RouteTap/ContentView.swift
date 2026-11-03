@@ -25,20 +25,12 @@ struct ContentView: View {
 				.padding(28)
 				.multilineTextAlignment(.center)
 			case .signedIn(let user):
-				// The saved-route home screen is implemented in the next step.
-				VStack(spacing: 20) {
-					Image(systemName: "checkmark.circle.fill")
-						.font(.system(size: 48)).foregroundStyle(.green)
-					Text("ログインしました").font(.title2.bold())
-					Text(user.email).foregroundStyle(.secondary)
-					if let error = auth.errorMessage {
-						Text(error).foregroundStyle(.red)
-					}
-					Button("ログアウト") { auth.logout() }
-						.buttonStyle(.bordered)
-						.accessibilityIdentifier("auth.logout")
-				}
-				.padding(28)
+				SavedRoutesView(
+					accountError: auth.errorMessage,
+					onLogout: auth.logout,
+					onSessionExpired: auth.expireSession
+				)
+				.id(user.id)
 			}
 		}
 		.tint(Color(red: 0.02, green: 0.60, blue: 0.33))
