@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 @MainActor
-final class AuthModel: ObservableObject {
+final class AuthViewModel: ObservableObject {
 	enum State: Equatable {
 		case restoring, signedOut
 		case signedIn(AuthenticatedUser)

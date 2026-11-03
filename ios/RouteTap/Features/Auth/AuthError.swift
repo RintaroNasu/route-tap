@@ -1,17 +1,5 @@
 import Foundation
 
-struct AuthenticatedUser: Decodable, Equatable {
-	let id: UInt
-	let email: String
-}
-
-enum AuthMode: String {
-	case login, signup
-
-	var title: String { self == .login ? "ログイン" : "新規登録" }
-	var buttonTitle: String { self == .login ? "ログイン" : "アカウントを作成" }
-}
-
 enum AuthError: LocalizedError {
 	case configuration, invalidResponse, unauthorized, duplicateEmail, invalidInput, server,
 		connection, keychain
