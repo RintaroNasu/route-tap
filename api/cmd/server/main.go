@@ -85,7 +85,9 @@ func newServer(conn *gorm.DB, secret string) *echo.Echo {
 	jwtManager := auth.NewJWTManager(secret, time.Hour)
 	authRepository := repository.NewAuthRepository(conn)
 	authService := service.NewAuthService(authRepository, jwtManager)
-	route.Register(e, handler.NewAuthHandler(authService), auth.Middleware(jwtManager))
+	savedRouteRepository := repository.NewSavedRouteRepository(conn)
+	savedRouteService := service.NewSavedRouteService(savedRouteRepository)
+	route.Register(e, handler.NewAuthHandler(authService), handler.NewSavedRouteHandler(savedRouteService), auth.Middleware(jwtManager))
 
 	return e
 }
