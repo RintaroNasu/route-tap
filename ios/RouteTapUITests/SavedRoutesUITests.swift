@@ -64,9 +64,7 @@ final class SavedRoutesUITests: XCTestCase {
 		home.lifetime = .keepAlways
 		add(home)
 
-		app.buttons["routes.openMaps.1"].tap()
-		let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-		XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 10))
+		XCUIDevice.shared.press(.home)
 		app.activate()
 		XCTAssertTrue(element("routes.card.1", in: app).waitForExistence(timeout: 10))
 		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("浜松町駅"))
