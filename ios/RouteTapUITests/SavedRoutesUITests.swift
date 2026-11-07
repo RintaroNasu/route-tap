@@ -12,13 +12,7 @@ final class SavedRoutesUITests: XCTestCase {
 		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = server.baseURL
 		app.launch()
 
-		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
-		app.textFields["auth.email"].tap()
-		app.textFields["auth.email"].typeText("test@example.com")
-		app.secureTextFields["auth.password"].tap()
-		app.secureTextFields["auth.password"].typeText("password")
-		app.buttons["auth.submit"].tap()
-		XCTAssertTrue(app.staticTexts["routes.heading"].waitForExistence(timeout: 10))
+		login(app)
 		XCTAssertTrue(element("routes.empty", in: app).waitForExistence(timeout: 5))
 		app.buttons["routes.add"].tap()
 		app.buttons["routes.save"].tap()
@@ -31,7 +25,9 @@ final class SavedRoutesUITests: XCTestCase {
 			input.tap()
 			input.typeText(value)
 		}
-		app.keyboards.buttons["done"].tap()
+		app.keyboards.buttons.matching(
+			NSPredicate(format: "identifier ==[c] %@ OR label == %@", "done", "完了")
+		).firstMatch.tap()
 		XCTAssertEqual(
 			XCTWaiter.wait(
 				for: [
@@ -55,21 +51,100 @@ final class SavedRoutesUITests: XCTestCase {
 		app.buttons["routes.save"].tap()
 		let card = element("routes.card.1", in: app)
 		XCTAssertTrue(card.waitForExistence(timeout: 10))
-		XCTAssertTrue(card.label.contains("会社への移動"))
-		XCTAssertTrue(card.label.contains("大井町駅"))
-		XCTAssertTrue(card.label.contains("浜松町駅"))
-		XCTAssertFalse(app.buttons["Google Mapsで開く"].exists)
+		XCTAssertTrue(card.staticTexts["会社への移動"].exists)
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("大井町駅"))
+		XCTAssertTrue(element("routes.destination.1", in: app).label.contains("浜松町駅"))
+		app.buttons["routes.direction.inbound.1"].tap()
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("浜松町駅"))
+		XCTAssertTrue(element("routes.destination.1", in: app).label.contains("大井町駅"))
+		XCTAssertTrue(app.buttons["routes.openMaps.1"].exists)
+		XCTAssertEqual(app.buttons["routes.openMaps.1"].label, "Google Mapsで開く")
 		let home = XCTAttachment(screenshot: app.screenshot())
-		home.name = "いつもの移動"
+		home.name = "いつもの移動・復路"
 		home.lifetime = .keepAlways
 		add(home)
+
+		XCUIDevice.shared.press(.home)
+		app.activate()
+		XCTAssertTrue(element("routes.card.1", in: app).waitForExistence(timeout: 10))
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("浜松町駅"))
+		app.buttons["routes.direction.outbound.1"].tap()
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("大井町駅"))
+		XCTAssertTrue(element("routes.destination.1", in: app).label.contains("浜松町駅"))
 
 		app.terminate()
 		app.launch()
 		XCTAssertTrue(element("routes.card.1", in: app).waitForExistence(timeout: 10))
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("大井町駅"))
 		app.buttons["アカウント"].tap()
 		app.buttons["auth.logout"].tap()
 		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
+	}
+
+	@MainActor
+	func testGoogleMapsShowsErrorWhenPlaceMakesURLTooLong() throws {
+		continueAfterFailure = false
+		XCUIDevice.shared.orientation = .portrait
+		let server = try RouteTestServer(routes: [
+			[
+				"id": 1, "name": "長い場所", "origin": String(repeating: "駅", count: 260),
+				"destination": "浜松町駅",
+			]
+		])
+		defer { server.stop() }
+		let app = XCUIApplication()
+		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = server.baseURL
+		app.launch()
+		login(app)
+		let button = app.buttons["routes.openMaps.1"]
+		XCTAssertTrue(button.waitForExistence(timeout: 10))
+		for _ in 0..<3 {
+			if button.isHittable { break }
+			app.swipeUp()
+		}
+		button.tap()
+		let alert = app.alerts["Google Mapsを開けませんでした"]
+		XCTAssertTrue(alert.waitForExistence(timeout: 5))
+		XCTAssertTrue(alert.staticTexts["場所の情報が長すぎます。出発地・目的地を短くして登録し直してください。"].exists)
+		alert.buttons["閉じる"].tap()
+		XCTAssertTrue(app.staticTexts["routes.heading"].exists)
+	}
+
+	@MainActor
+	func testDirectionSelectionIsIndependentForEachCard() throws {
+		continueAfterFailure = false
+		XCUIDevice.shared.orientation = .portrait
+		let server = try RouteTestServer(routes: [
+			["id": 1, "name": "通勤", "origin": "大井町駅", "destination": "浜松町駅"],
+			["id": 2, "name": "休日", "origin": "渋谷駅", "destination": "新宿駅"],
+		])
+		defer { server.stop() }
+		let app = XCUIApplication()
+		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = server.baseURL
+		app.launch()
+		login(app)
+		XCTAssertTrue(app.buttons["routes.direction.inbound.1"].waitForExistence(timeout: 10))
+		app.buttons["routes.direction.inbound.1"].tap()
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("浜松町駅"))
+		app.swipeUp()
+		XCTAssertTrue(element("routes.origin.2", in: app).waitForExistence(timeout: 5))
+		XCTAssertTrue(element("routes.origin.2", in: app).label.contains("渋谷駅"))
+		XCTAssertTrue(element("routes.destination.2", in: app).label.contains("新宿駅"))
+		app.buttons["routes.direction.inbound.2"].tap()
+		XCTAssertTrue(element("routes.origin.2", in: app).label.contains("新宿駅"))
+		app.swipeDown()
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("浜松町駅"))
+	}
+
+	@MainActor
+	private func login(_ app: XCUIApplication) {
+		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
+		app.textFields["auth.email"].tap()
+		app.textFields["auth.email"].typeText("test@example.com")
+		app.secureTextFields["auth.password"].tap()
+		app.secureTextFields["auth.password"].typeText("password")
+		app.buttons["auth.submit"].tap()
+		XCTAssertTrue(app.staticTexts["routes.heading"].waitForExistence(timeout: 10))
 	}
 
 	@MainActor
@@ -86,7 +161,8 @@ private final class RouteTestServer {
 	private var shouldFailSave = false
 	var baseURL: String { "http://127.0.0.1:\(listener.port!.rawValue)" }
 
-	init() throws {
+	init(routes: [[String: Any]] = []) throws {
+		self.routes = routes
 		let parameters = NWParameters.tcp
 		parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
 		listener = try NWListener(using: parameters)
