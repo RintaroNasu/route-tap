@@ -6,10 +6,14 @@ final class SavedRoutesViewModel: ObservableObject {
 	@Published private(set) var routes: [SavedRoute] = []
 	@Published private(set) var isLoading = false
 	@Published private(set) var isSaving = false
+	@Published private(set) var deletingRouteID: UInt?
+	@Published private(set) var deleteError: String?
 	@Published private(set) var hasLoaded = false
 	@Published private(set) var loadError: String?
 	@Published private(set) var saveError: String?
 	@Published private(set) var sessionExpired = false
+
+	var isBusy: Bool { isLoading || isSaving || deletingRouteID != nil }
 
 	private let api: any SavedRouteServicing
 	private let tokens: any TokenStoring
@@ -23,7 +27,7 @@ final class SavedRoutesViewModel: ObservableObject {
 	}
 
 	func load() async {
-		guard !isLoading, !isSaving, !sessionExpired else { return }
+		guard !isBusy, !sessionExpired else { return }
 		isLoading = true
 		loadError = nil
 		defer { isLoading = false }
@@ -39,8 +43,8 @@ final class SavedRoutesViewModel: ObservableObject {
 		}
 	}
 
-	func save(_ input: SavedRouteInput) async -> Bool {
-		guard !isSaving, !isLoading, !sessionExpired else { return false }
+	func save(_ input: SavedRouteInput, editing route: SavedRoute? = nil) async -> Bool {
+		guard !isBusy, !sessionExpired else { return false }
 		saveError = nil
 		let input = SavedRouteInput(
 			name: input.name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -54,19 +58,60 @@ final class SavedRoutesViewModel: ObservableObject {
 		isSaving = true
 		defer { isSaving = false }
 		do {
-			let route = try await api.createRoute(input: input, token: token())
-			routes.insert(route, at: 0)
-			hasLoaded = true
+			if let route {
+				let updated = try await api.updateRoute(id: route.id, input: input, token: token())
+				if let index = routes.firstIndex(where: { $0.id == route.id }) {
+					routes[index] = updated
+				} else {
+					isSaving = false
+					await load()
+				}
+			} else {
+				let created = try await api.createRoute(input: input, token: token())
+				routes.insert(created, at: 0)
+				hasLoaded = true
+			}
 			return true
 		} catch is CancellationError {
 			return false
 		} catch SavedRouteError.unauthorized {
 			expireSession()
+		} catch SavedRouteError.notFound {
+			saveError = SavedRouteError.notFound.localizedDescription
+			if route != nil {
+				isSaving = false
+				await load()
+			}
 		} catch {
 			saveError = error.localizedDescription
 		}
 		return false
 	}
+
+	func delete(_ route: SavedRoute) async -> Bool {
+		guard !isBusy, !sessionExpired else { return false }
+		deletingRouteID = route.id
+		deleteError = nil
+		defer { deletingRouteID = nil }
+		do {
+			try await api.deleteRoute(id: route.id, token: token())
+			routes.removeAll { $0.id == route.id }
+			return true
+		} catch is CancellationError {
+			return false
+		} catch SavedRouteError.unauthorized {
+			expireSession()
+		} catch SavedRouteError.notFound {
+			deleteError = SavedRouteError.notFound.localizedDescription
+			deletingRouteID = nil
+			await load()
+		} catch {
+			deleteError = error.localizedDescription
+		}
+		return false
+	}
+
+	func clearDeleteError() { deleteError = nil }
 
 	func clearSaveError() {
 		saveError = nil
@@ -83,6 +128,7 @@ final class SavedRoutesViewModel: ObservableObject {
 		routes = []
 		loadError = nil
 		saveError = nil
+		deleteError = nil
 		sessionExpired = true
 	}
 

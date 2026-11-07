@@ -2,6 +2,10 @@ import SwiftUI
 
 struct SavedRouteCard: View {
 	let route: SavedRoute
+	let actionsDisabled: Bool
+	let isDeleting: Bool
+	let onEdit: () -> Void
+	let onDelete: () -> Void
 	@State private var direction: RouteDirection = .outbound
 	@Environment(\.openURL) private var openURL
 	@State private var showingMapsError = false
@@ -38,7 +42,31 @@ struct SavedRouteCard: View {
 			Text(route.name)
 				.font(.title3.bold())
 				.fixedSize(horizontal: false, vertical: true)
+			Spacer(minLength: 0)
+			if isDeleting {
+				ProgressView().accessibilityLabel("削除中")
+					.accessibilityIdentifier("routes.deleting.\(route.id)")
+			} else {
+				actionsMenu
+			}
 		}
+	}
+
+	private var actionsMenu: some View {
+		Menu {
+			Button(action: onEdit) { Label("編集", systemImage: "pencil") }
+				.accessibilityIdentifier("routes.edit.\(route.id)")
+			Button(role: .destructive, action: onDelete) { Label("削除", systemImage: "trash") }
+				.accessibilityIdentifier("routes.delete.\(route.id)")
+		} label: {
+			Image(systemName: "ellipsis")
+				.font(.title3.weight(.semibold))
+				.foregroundStyle(.secondary)
+				.frame(width: 44, height: 44)
+		}
+		.disabled(actionsDisabled)
+		.accessibilityLabel("\(route.name)の操作")
+		.accessibilityIdentifier("routes.menu.\(route.id)")
 	}
 
 	private var directionPicker: some View {

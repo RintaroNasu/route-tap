@@ -2,12 +2,20 @@ import SwiftUI
 
 struct SavedRoutesView: View {
 	@StateObject private var viewModel = SavedRoutesViewModel()
-	@State private var showingForm = false
+	@State private var activeForm: RouteForm?
+	@State private var routeToDelete: SavedRoute?
+	@State private var showingDeleteConfirmation = false
+	@State private var showingDeleteError = false
 	@Environment(\.scenePhase) private var scenePhase
 
 	let accountError: String?
 	let onLogout: () -> Void
 	let onSessionExpired: () -> Void
+
+	private struct RouteForm: Identifiable {
+		let id = UUID()
+		let route: SavedRoute?
+	}
 
 	var body: some View {
 		ScrollView {
@@ -28,8 +36,27 @@ struct SavedRoutesView: View {
 		}
 		.background(Color(.systemGroupedBackground))
 		.refreshable { await viewModel.load() }
-		.sheet(isPresented: $showingForm) {
-			SavedRouteFormView(viewModel: viewModel)
+		.sheet(item: $activeForm) { form in
+			SavedRouteFormView(viewModel: viewModel, route: form.route)
+		}
+		.alert("移動を削除しますか？", isPresented: $showingDeleteConfirmation, presenting: routeToDelete) {
+			route in
+			Button("削除", role: .destructive) {
+				routeToDelete = nil
+				Task { await viewModel.delete(route) }
+			}
+			.accessibilityIdentifier("routes.confirmDelete")
+			Button("キャンセル", role: .cancel) { routeToDelete = nil }
+		} message: { route in
+			Text("「\(route.name)」を削除します。この操作は取り消せません。")
+		}
+		.alert("移動を削除できませんでした", isPresented: $showingDeleteError) {
+			Button("閉じる", role: .cancel) { viewModel.clearDeleteError() }
+		} message: {
+			Text(viewModel.deleteError ?? "もう一度お試しください。")
+		}
+		.onChange(of: viewModel.deleteError) { _, error in
+			showingDeleteError = error != nil
 		}
 		.task { await viewModel.load() }
 		.onChange(of: scenePhase) { _, phase in
@@ -37,7 +64,7 @@ struct SavedRoutesView: View {
 		}
 		.onChange(of: viewModel.sessionExpired) { _, expired in
 			if expired {
-				showingForm = false
+				activeForm = nil
 				onSessionExpired()
 			}
 		}
@@ -52,6 +79,7 @@ struct SavedRoutesView: View {
 				Spacer()
 				Menu {
 					Button("ログアウト", action: onLogout)
+						.disabled(viewModel.isSaving || viewModel.deletingRouteID != nil)
 						.accessibilityIdentifier("auth.logout")
 				} label: {
 					Image(systemName: "person.crop.circle")
@@ -61,14 +89,14 @@ struct SavedRoutesView: View {
 				}
 				.accessibilityLabel("アカウント")
 				Button {
-					showingForm = true
+					activeForm = RouteForm(route: nil)
 				} label: {
 					Image(systemName: "plus")
 						.font(.system(size: 23, weight: .medium))
 						.frame(width: 48, height: 48)
 						.background(.tint.opacity(0.09), in: Circle())
 				}
-				.disabled(viewModel.isLoading || viewModel.isSaving)
+				.disabled(viewModel.isBusy)
 				.accessibilityLabel("移動を登録")
 				.accessibilityIdentifier("routes.add")
 			}
@@ -92,7 +120,16 @@ struct SavedRoutesView: View {
 		} else {
 			LazyVStack(spacing: 16) {
 				ForEach(viewModel.routes) { route in
-					SavedRouteCard(route: route)
+					SavedRouteCard(
+						route: route,
+						actionsDisabled: viewModel.isBusy,
+						isDeleting: viewModel.deletingRouteID == route.id,
+						onEdit: { activeForm = RouteForm(route: route) },
+						onDelete: {
+							routeToDelete = route
+							showingDeleteConfirmation = true
+						}
+					)
 				}
 			}
 		}
@@ -124,7 +161,7 @@ struct SavedRoutesView: View {
 					.font(.caption).foregroundStyle(.secondary)
 			}
 			Button("再試行") { Task { await viewModel.load() } }
-				.disabled(viewModel.isLoading || viewModel.isSaving)
+				.disabled(viewModel.isBusy)
 		}
 		.accessibilityIdentifier("routes.loadError")
 	}
