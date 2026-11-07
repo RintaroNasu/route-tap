@@ -2,18 +2,31 @@ import SwiftUI
 
 struct SavedRouteFormView: View {
 	@ObservedObject var viewModel: SavedRoutesViewModel
+	let route: SavedRoute?
 	@Environment(\.dismiss) private var dismiss
 	@State private var input = SavedRouteInput()
 	@FocusState private var focusedField: Field?
 	private enum Field: String { case name, origin, destination }
 
+	init(viewModel: SavedRoutesViewModel, route: SavedRoute? = nil) {
+		self.viewModel = viewModel
+		self.route = route
+		_input = State(
+			initialValue: SavedRouteInput(
+				name: route?.name ?? "",
+				origin: route?.origin ?? "",
+				destination: route?.destination ?? ""
+			))
+	}
+
 	var body: some View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: 26) {
 				closeButton
-				Text("移動を登録")
+				Text(route == nil ? "移動を登録" : "移動を編集")
 					.font(.largeTitle.bold())
 					.accessibilityAddTraits(.isHeader)
+					.accessibilityIdentifier("routes.formHeading")
 				inputField(title: "表示名", placeholder: "例：会社への移動", text: $input.name, field: .name)
 				inputField(
 					title: "出発地", placeholder: "例：大井町駅、東京都品川区", text: $input.origin, field: .origin)
@@ -93,22 +106,22 @@ struct SavedRouteFormView: View {
 		Button {
 			focusedField = nil
 			Task {
-				if await viewModel.save(input) { dismiss() }
+				if await viewModel.save(input, editing: route) { dismiss() }
 			}
 		} label: {
 			HStack(spacing: 10) {
 				if viewModel.isSaving { ProgressView().tint(.white) }
-				Text("保存").font(.headline)
+				Text(route == nil ? "保存" : "変更を保存").font(.headline)
 			}
 			.frame(maxWidth: .infinity, minHeight: 56)
 		}
 		.buttonStyle(.plain)
 		.foregroundStyle(.white)
 		.background(
-			Color.accentColor.opacity(viewModel.isSaving || viewModel.isLoading ? 0.6 : 1),
+			Color.accentColor.opacity(viewModel.isBusy ? 0.6 : 1),
 			in: RoundedRectangle(cornerRadius: 14)
 		)
-		.disabled(viewModel.isSaving || viewModel.isLoading)
+		.disabled(viewModel.isBusy)
 		.accessibilityIdentifier("routes.save")
 		.frame(maxWidth: 520)
 		.padding(.horizontal, 24)

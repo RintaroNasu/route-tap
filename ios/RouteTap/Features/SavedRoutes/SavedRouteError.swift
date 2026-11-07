@@ -1,7 +1,7 @@
 import Foundation
 
 enum SavedRouteError: LocalizedError, Equatable {
-	case configuration, connection, invalidResponse, invalidInput, unauthorized, server
+	case configuration, connection, invalidResponse, invalidInput, unauthorized, notFound, server
 
 	var errorDescription: String? {
 		switch self {
@@ -10,6 +10,7 @@ enum SavedRouteError: LocalizedError, Equatable {
 		case .invalidResponse: "サーバーからの応答を確認できませんでした。もう一度お試しください。"
 		case .invalidInput: "表示名・出発地・目的地の入力内容を確認してください。"
 		case .unauthorized: "ログインの有効期限が切れました。再度ログインしてください。"
+		case .notFound: "この移動は見つかりませんでした。一覧を再取得します。"
 		case .server: "サーバーで問題が発生しました。時間をおいてお試しください。"
 		}
 	}

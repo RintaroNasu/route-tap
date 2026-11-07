@@ -137,6 +137,113 @@ final class SavedRoutesUITests: XCTestCase {
 	}
 
 	@MainActor
+	func testEditAndDeleteWithCancellationAndRetry() throws {
+		continueAfterFailure = false
+		XCUIDevice.shared.orientation = .portrait
+		let server = try RouteTestServer(routes: [
+			["id": 1, "name": "通勤", "origin": "大井町駅", "destination": "浜松町駅"]
+		])
+		defer { server.stop() }
+		let app = XCUIApplication()
+		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = server.baseURL
+		app.launch()
+		login(app)
+		XCTAssertTrue(app.buttons["routes.menu.1"].waitForExistence(timeout: 10))
+		app.buttons["routes.direction.inbound.1"].tap()
+		app.buttons["routes.menu.1"].tap()
+		app.buttons["routes.edit.1"].tap()
+		XCTAssertTrue(app.staticTexts["routes.formHeading"].waitForExistence(timeout: 5))
+		XCTAssertEqual(app.staticTexts["routes.formHeading"].label, "移動を編集")
+		XCTAssertEqual(element("routes.origin", in: app).value as? String, "大井町駅")
+		XCTAssertEqual(element("routes.destination", in: app).value as? String, "浜松町駅")
+		replaceName("キャンセル用", in: app)
+		app.buttons["routes.close"].tap()
+		XCTAssertTrue(app.buttons["routes.menu.1"].waitForExistence(timeout: 5))
+		XCTAssertTrue(app.staticTexts["通勤"].exists)
+		XCTAssertEqual(server.mutationCounts().updates, 0)
+
+		app.buttons["routes.menu.1"].tap()
+		app.buttons["routes.edit.1"].tap()
+		XCTAssertEqual(element("routes.name", in: app).value as? String, "通勤")
+		let edit = XCTAttachment(screenshot: app.screenshot())
+		edit.name = "移動を編集"
+		edit.lifetime = .keepAlways
+		add(edit)
+		replaceName("平日通勤", in: app)
+		server.failNextUpdate()
+		app.buttons["routes.save"].tap()
+		XCTAssertTrue(app.staticTexts["routes.saveError"].waitForExistence(timeout: 5))
+		XCTAssertEqual(element("routes.name", in: app).value as? String, "平日通勤")
+		app.buttons["routes.save"].tap()
+		XCTAssertTrue(app.buttons["routes.menu.1"].waitForExistence(timeout: 10))
+		XCTAssertTrue(app.staticTexts["平日通勤"].exists)
+		XCTAssertTrue(element("routes.origin.1", in: app).label.contains("浜松町駅"))
+		XCTAssertTrue(element("routes.destination.1", in: app).label.contains("大井町駅"))
+		XCTAssertEqual(server.mutationCounts().updates, 2)
+
+		app.buttons["routes.menu.1"].tap()
+		app.buttons["routes.delete.1"].tap()
+		let confirm = app.alerts["移動を削除しますか？"]
+		XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+		XCTAssertTrue(confirm.staticTexts["「平日通勤」を削除します。この操作は取り消せません。"].exists)
+		let deletion = XCTAttachment(screenshot: app.screenshot())
+		deletion.name = "移動の削除確認"
+		deletion.lifetime = .keepAlways
+		add(deletion)
+		confirm.buttons["キャンセル"].tap()
+		XCTAssertTrue(app.buttons["routes.menu.1"].exists)
+		XCTAssertEqual(server.mutationCounts().deletes, 0)
+
+		server.failNextDelete()
+		app.buttons["routes.menu.1"].tap()
+		app.buttons["routes.delete.1"].tap()
+		app.alerts["移動を削除しますか？"].buttons["routes.confirmDelete"].tap()
+		let error = app.alerts["移動を削除できませんでした"]
+		XCTAssertTrue(error.waitForExistence(timeout: 5))
+		error.buttons["閉じる"].tap()
+		XCTAssertTrue(app.buttons["routes.menu.1"].exists)
+		app.buttons["routes.menu.1"].tap()
+		app.buttons["routes.delete.1"].tap()
+		app.alerts["移動を削除しますか？"].buttons["routes.confirmDelete"].tap()
+		XCTAssertTrue(element("routes.empty", in: app).waitForExistence(timeout: 10))
+		XCTAssertFalse(element("routes.card.1", in: app).exists)
+		XCTAssertEqual(server.mutationCounts().deletes, 2)
+	}
+
+	@MainActor
+	func testEditingMissingRouteRefreshesList() throws {
+		continueAfterFailure = false
+		let server = try RouteTestServer(routes: [
+			["id": 1, "name": "通勤", "origin": "大井町駅", "destination": "浜松町駅"]
+		])
+		defer { server.stop() }
+		let app = XCUIApplication()
+		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = server.baseURL
+		app.launch()
+		login(app)
+		XCTAssertTrue(app.buttons["routes.menu.1"].waitForExistence(timeout: 10))
+		app.buttons["routes.menu.1"].tap()
+		app.buttons["routes.edit.1"].tap()
+		XCTAssertTrue(app.staticTexts["routes.formHeading"].waitForExistence(timeout: 5))
+		server.removeRoute(id: 1)
+		app.buttons["routes.save"].tap()
+		XCTAssertTrue(app.staticTexts["routes.saveError"].waitForExistence(timeout: 5))
+		XCTAssertEqual(app.staticTexts["routes.saveError"].label, "この移動は見つかりませんでした。一覧を再取得します。")
+		app.buttons["routes.close"].tap()
+		XCTAssertTrue(element("routes.empty", in: app).waitForExistence(timeout: 5))
+	}
+
+	@MainActor
+	private func replaceName(_ name: String, in app: XCUIApplication) {
+		let field = element("routes.name", in: app)
+		field.tap()
+		field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+		let previous = field.value as? String ?? ""
+		field.typeText(
+			String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count) + name)
+	}
+
+	@MainActor
 	private func login(_ app: XCUIApplication) {
 		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
 		app.textFields["auth.email"].tap()
@@ -159,10 +266,16 @@ private final class RouteTestServer {
 	private let queue = DispatchQueue(label: "RouteTap.UI-test-server")
 	private var routes: [[String: Any]] = []
 	private var shouldFailSave = false
+	private var shouldFailUpdate = false
+	private var shouldFailDelete = false
+	private var updateRequests = 0
+	private var deleteRequests = 0
+	private var nextRouteID = 1
 	var baseURL: String { "http://127.0.0.1:\(listener.port!.rawValue)" }
 
 	init(routes: [[String: Any]] = []) throws {
 		self.routes = routes
+		nextRouteID = (routes.compactMap { $0["id"] as? Int }.max() ?? 0) + 1
 		let parameters = NWParameters.tcp
 		parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
 		listener = try NWListener(using: parameters)
@@ -187,6 +300,12 @@ private final class RouteTestServer {
 
 	func stop() { listener.cancel() }
 	func failNextSave() { queue.sync { shouldFailSave = true } }
+	func failNextUpdate() { queue.sync { shouldFailUpdate = true } }
+	func failNextDelete() { queue.sync { shouldFailDelete = true } }
+	func removeRoute(id: Int) { queue.sync { routes.removeAll { $0["id"] as? Int == id } } }
+	func mutationCounts() -> (updates: Int, deletes: Int) {
+		queue.sync { (updateRequests, deleteRequests) }
+	}
 
 	private func receive(_ connection: NWConnection, buffer: Data) {
 		connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
@@ -225,7 +344,7 @@ private final class RouteTestServer {
 
 	private func respond(_ connection: NWConnection, requestLine: String, body: Data) {
 		var status = 200
-		let response: Any
+		let response: Any?
 		if requestLine.hasPrefix("POST /login ") {
 			response = ["token": "ui-test-token"]
 		} else if requestLine.hasPrefix("GET /me ") {
@@ -242,20 +361,60 @@ private final class RouteTestServer {
 					"error": ["code": "INTERNAL_ERROR", "message": "internal server error"]
 				]
 			} else {
-				route["id"] = routes.count + 1
+				route["id"] = nextRouteID
+				nextRouteID += 1
 				routes.insert(route, at: 0)
 				status = 201
 				response = route
+			}
+		} else if requestLine.hasPrefix("PUT /routes/") {
+			updateRequests += 1
+			if shouldFailUpdate {
+				shouldFailUpdate = false
+				status = 500
+				response = ["error": ["message": "internal server error"]]
+			} else if let id = routeID(from: requestLine),
+				let index = routes.firstIndex(where: { $0["id"] as? Int == id }),
+				var route = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+			{
+				route["id"] = id
+				routes[index] = route
+				response = route
+			} else {
+				status = 404
+				response = ["error": ["message": "route not found"]]
+			}
+		} else if requestLine.hasPrefix("DELETE /routes/") {
+			deleteRequests += 1
+			if shouldFailDelete {
+				shouldFailDelete = false
+				status = 500
+				response = ["error": ["message": "internal server error"]]
+			} else if let id = routeID(from: requestLine),
+				let index = routes.firstIndex(where: { $0["id"] as? Int == id })
+			{
+				routes.remove(at: index)
+				status = 204
+				response = nil
+			} else {
+				status = 404
+				response = ["error": ["message": "route not found"]]
 			}
 		} else {
 			status = 404
 			response = ["error": ["message": "not found"]]
 		}
-		let data = try! JSONSerialization.data(withJSONObject: response)
+		let data = response.map { try! JSONSerialization.data(withJSONObject: $0) } ?? Data()
 		var output = Data(
 			"HTTP/1.1 \(status) Response\r\nContent-Type: application/json\r\nContent-Length: \(data.count)\r\nConnection: close\r\n\r\n"
 				.utf8)
 		output.append(data)
 		connection.send(content: output, completion: .contentProcessed { _ in connection.cancel() })
 	}
+	private func routeID(from requestLine: String) -> Int? {
+		let parts = requestLine.split(separator: " ")
+		guard parts.count >= 2, let last = parts[1].split(separator: "/").last else { return nil }
+		return Int(last)
+	}
+
 }
