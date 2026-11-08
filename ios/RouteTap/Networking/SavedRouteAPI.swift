@@ -3,6 +3,8 @@ import Foundation
 protocol SavedRouteServicing {
 	func fetchRoutes(token: String) async throws -> [SavedRoute]
 	func createRoute(input: SavedRouteInput, token: String) async throws -> SavedRoute
+	func updateRoute(id: UInt, input: SavedRouteInput, token: String) async throws -> SavedRoute
+	func deleteRoute(id: UInt, token: String) async throws
 }
 
 struct SavedRouteAPI: SavedRouteServicing {
@@ -37,9 +39,32 @@ struct SavedRouteAPI: SavedRouteServicing {
 		}
 	}
 
-	private func makeRequest(token: String) throws -> URLRequest {
+	func updateRoute(id: UInt, input: SavedRouteInput, token: String) async throws -> SavedRoute {
+		var request = try makeRequest(token: token, routeID: id)
+		request.httpMethod = "PUT"
+		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		request.httpBody = try JSONEncoder().encode(input)
+		let data = try await send(request)
+		do {
+			let route = try JSONDecoder().decode(SavedRoute.self, from: data)
+			guard route.id == id else { throw SavedRouteError.invalidResponse }
+			return route
+		} catch {
+			throw SavedRouteError.invalidResponse
+		}
+	}
+
+	func deleteRoute(id: UInt, token: String) async throws {
+		var request = try makeRequest(token: token, routeID: id)
+		request.httpMethod = "DELETE"
+		_ = try await send(request)
+	}
+
+	private func makeRequest(token: String, routeID: UInt? = nil) throws -> URLRequest {
 		guard let baseURL else { throw SavedRouteError.configuration }
-		var request = URLRequest(url: baseURL.appendingPathComponent("routes"))
+		var url = baseURL.appendingPathComponent("routes")
+		if let routeID { url = url.appendingPathComponent(String(routeID)) }
+		var request = URLRequest(url: url)
 		request.timeoutInterval = 20
 		request.cachePolicy = .reloadIgnoringLocalCacheData
 		request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -63,6 +88,7 @@ struct SavedRouteAPI: SavedRouteServicing {
 		case 200..<300: return data
 		case 400: throw SavedRouteError.invalidInput
 		case 401: throw SavedRouteError.unauthorized
+		case 404: throw SavedRouteError.notFound
 		default: throw SavedRouteError.server
 		}
 	}

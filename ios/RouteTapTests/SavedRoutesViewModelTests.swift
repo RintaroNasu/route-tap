@@ -20,6 +20,19 @@ struct SavedRoutesViewModelTests {
 		var routes: [SavedRoute] = []
 		var fetchError: Error?
 		var createError: Error?
+		var updateError: Error?
+		var deleteError: Error?
+		var updatedID: UInt?
+		var deletedID: UInt?
+		var updatedToken: String?
+		var deletedToken: String?
+		var updatedInput: SavedRouteInput?
+		var updateCount = 0
+		var deleteCount = 0
+		var fetchCount = 0
+		var beforeFetch: (() async -> Void)?
+		var beforeUpdate: (() async -> Void)?
+		var beforeDelete: (() async -> Void)?
 		var fetchedToken: String?
 		var createdToken: String?
 		var submittedInput: SavedRouteInput?
@@ -29,6 +42,8 @@ struct SavedRoutesViewModelTests {
 
 		func fetchRoutes(token: String) async throws -> [SavedRoute] {
 			fetchedToken = token
+			fetchCount += 1
+			await beforeFetch?()
 			if let fetchError { throw fetchError }
 			return routes
 		}
@@ -41,6 +56,26 @@ struct SavedRoutesViewModelTests {
 			if let createError { throw createError }
 			return createdRoute
 		}
+		func updateRoute(id: UInt, input: SavedRouteInput, token: String) async throws -> SavedRoute
+		{
+			updateCount += 1
+			updatedID = id
+			updatedInput = input
+			updatedToken = token
+			await beforeUpdate?()
+			if let updateError { throw updateError }
+			return SavedRoute(
+				id: id, name: input.name, origin: input.origin, destination: input.destination)
+		}
+
+		func deleteRoute(id: UInt, token: String) async throws {
+			deleteCount += 1
+			deletedID = id
+			deletedToken = token
+			await beforeDelete?()
+			if let deleteError { throw deleteError }
+		}
+
 	}
 
 	let validInput = SavedRouteInput(name: "通勤", origin: "大井町駅", destination: "浜松町駅")
