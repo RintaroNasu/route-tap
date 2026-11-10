@@ -8,17 +8,31 @@ struct RouteTapTests {
 	final class TokenStore: TokenStoring {
 		var token: String?
 		var failSave = false
+		var failDelete = false
 		func read() throws -> String? { token }
 		func save(_ token: String) throws {
 			if failSave { throw AuthError.keychain }
 			self.token = token
 		}
-		func delete() throws { token = nil }
+		func delete() throws {
+			if failDelete { throw AuthError.keychain }
+			token = nil
+		}
 	}
 
 	final class API: AuthServicing {
 		var authenticateError: AuthError?
 		var profileError: AuthError?
+		var deleteError: Error?
+		var deleteCount = 0
+		var deletedToken: String?
+		var beforeDelete: (() async -> Void)?
+		func deleteAccount(token: String) async throws {
+			deleteCount += 1
+			deletedToken = token
+			await beforeDelete?()
+			if let deleteError { throw deleteError }
+		}
 		var submittedEmail: String?
 		var submittedPassword: String?
 		var submittedMode: AuthMode?
@@ -192,6 +206,25 @@ struct AuthAPITests {
 		}
 		let user = try await api.fetchCurrentUser(token: "api-test-token")
 		#expect(user.id == 42)
+		StubURLProtocol.handler = { request in
+			#expect(request.url?.path == "/me")
+			#expect(request.httpMethod == "DELETE")
+			#expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer api-test-token")
+			#expect(request.httpBody == nil)
+			return (204, Data())
+		}
+		try await api.deleteAccount(token: "api-test-token")
+		for status in [200, 202, 401, 500] {
+			StubURLProtocol.handler = { _ in (status, Data()) }
+			do {
+				try await api.deleteAccount(token: "api-test-token")
+				Issue.record("Account deletion accepted an unexpected status")
+			} catch let error as AuthError {
+				let expected: AuthError =
+					status == 401 ? .unauthorized : status == 500 ? .server : .invalidResponse
+				#expect(error.localizedDescription == expected.localizedDescription)
+			}
+		}
 		for status in [400, 401, 409, 500] {
 			StubURLProtocol.handler = { _ in (status, Data()) }
 			do {

@@ -6,11 +6,14 @@ struct SavedRoutesView: View {
 	@State private var routeToDelete: SavedRoute?
 	@State private var showingDeleteConfirmation = false
 	@State private var showingDeleteError = false
+	@State private var showingAccountDeletionConfirmation = false
 	@Environment(\.scenePhase) private var scenePhase
 
 	let accountError: String?
+	let isDeletingAccount: Bool
 	let onLogout: () -> Void
 	let onSessionExpired: () -> Void
+	let onDeleteAccount: () async -> Void
 
 	private struct RouteForm: Identifiable {
 		let id = UUID()
@@ -21,8 +24,16 @@ struct SavedRoutesView: View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: 26) {
 				header
+				if isDeletingAccount {
+					HStack(spacing: 12) {
+						ProgressView()
+						Text("アカウントを削除中…").font(.subheadline)
+					}
+					.accessibilityIdentifier("auth.deletingAccount")
+				}
 				if let accountError {
 					Text(accountError).font(.subheadline).foregroundStyle(.red)
+						.accessibilityIdentifier("auth.accountError")
 				}
 				if let error = viewModel.loadError {
 					loadError(message: error)
@@ -35,7 +46,10 @@ struct SavedRoutesView: View {
 			.frame(maxWidth: .infinity)
 		}
 		.background(Color(.systemGroupedBackground))
-		.refreshable { await viewModel.load() }
+		.disabled(isDeletingAccount)
+		.refreshable {
+			if !isDeletingAccount { await viewModel.load() }
+		}
 		.sheet(item: $activeForm) { form in
 			SavedRouteFormView(viewModel: viewModel, route: form.route)
 		}
@@ -58,9 +72,19 @@ struct SavedRoutesView: View {
 		.onChange(of: viewModel.deleteError) { _, error in
 			showingDeleteError = error != nil
 		}
-		.task { await viewModel.load() }
+		.alert("アカウントを削除しますか？", isPresented: $showingAccountDeletionConfirmation) {
+			Button("アカウントを削除", role: .destructive) {
+				Task { await onDeleteAccount() }
+			}
+			.disabled(viewModel.isBusy || isDeletingAccount)
+			.accessibilityIdentifier("auth.confirmAccountDeletion")
+			Button("キャンセル", role: .cancel) {}
+		} message: {
+			Text("アカウントと保存した移動がすべて削除されます。この操作は取り消せません。")
+		}
+		.task { if !isDeletingAccount { await viewModel.load() } }
 		.onChange(of: scenePhase) { _, phase in
-			if phase == .active { Task { await viewModel.load() } }
+			if phase == .active && !isDeletingAccount { Task { await viewModel.load() } }
 		}
 		.onChange(of: viewModel.sessionExpired) { _, expired in
 			if expired {
@@ -81,6 +105,11 @@ struct SavedRoutesView: View {
 					Button("ログアウト", action: onLogout)
 						.disabled(viewModel.isSaving || viewModel.deletingRouteID != nil)
 						.accessibilityIdentifier("auth.logout")
+					Button("アカウント削除", role: .destructive) {
+						showingAccountDeletionConfirmation = true
+					}
+					.disabled(viewModel.isBusy || isDeletingAccount)
+					.accessibilityIdentifier("auth.deleteAccount")
 				} label: {
 					Image(systemName: "person.crop.circle")
 						.font(.title2)

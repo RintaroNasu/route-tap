@@ -4,6 +4,7 @@ protocol AuthServicing {
 	func signUp(email: String, password: String) async throws -> String
 	func login(email: String, password: String) async throws -> String
 	func fetchCurrentUser(token: String) async throws -> AuthenticatedUser
+	func deleteAccount(token: String) async throws
 }
 
 struct AuthAPI: AuthServicing {
@@ -68,6 +69,13 @@ struct AuthAPI: AuthServicing {
 		}
 	}
 
+	func deleteAccount(token: String) async throws {
+		var request = try makeRequest(path: "me")
+		request.httpMethod = "DELETE"
+		request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+		_ = try await send(request, expectedStatus: 204)
+	}
+
 	private func makeRequest(path: String) throws -> URLRequest {
 		guard let baseURL else {
 			throw AuthError.configuration
@@ -80,7 +88,7 @@ struct AuthAPI: AuthServicing {
 		return request
 	}
 
-	private func send(_ request: URLRequest) async throws -> Data {
+	private func send(_ request: URLRequest, expectedStatus: Int? = nil) async throws -> Data {
 		let data: Data
 		let response: URLResponse
 		do {
@@ -97,6 +105,9 @@ struct AuthAPI: AuthServicing {
 		}
 		switch httpResponse.statusCode {
 		case 200..<300:
+			if let expectedStatus, httpResponse.statusCode != expectedStatus {
+				throw AuthError.invalidResponse
+			}
 			return data
 		case 400:
 			throw AuthError.invalidInput

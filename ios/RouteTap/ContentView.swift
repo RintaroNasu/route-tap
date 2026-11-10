@@ -24,11 +24,28 @@ struct ContentView: View {
 				}
 				.padding(28)
 				.multilineTextAlignment(.center)
+			case .accountDeleted:
+				VStack(spacing: 20) {
+					Image(systemName: "checkmark.circle")
+						.font(.system(size: 44)).foregroundStyle(.tint)
+					Text("アカウントは削除されています").font(.title2.bold())
+					Text(auth.errorMessage ?? "この端末のログイン情報を消去してください。")
+						.foregroundStyle(.secondary)
+					Button("ログイン情報を消去して戻る") { auth.retryAccountCleanup() }
+						.buttonStyle(.borderedProminent)
+						.disabled(auth.isBusy)
+						.accessibilityIdentifier("auth.retryAccountCleanup")
+				}
+				.padding(28)
+				.multilineTextAlignment(.center)
+
 			case .signedIn(let user):
 				SavedRoutesView(
 					accountError: auth.errorMessage,
+					isDeletingAccount: auth.isDeletingAccount,
 					onLogout: auth.logout,
-					onSessionExpired: auth.expireSession
+					onSessionExpired: auth.expireSession,
+					onDeleteAccount: auth.deleteAccount
 				)
 				.id(user.id)
 			}
