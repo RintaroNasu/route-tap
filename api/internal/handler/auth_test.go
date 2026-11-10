@@ -19,9 +19,10 @@ import (
 const authUserIDContextKey = "auth_user_id"
 
 type fakeAuthService struct {
-	signupFunc func(ctx context.Context, input service.SignupInput) (*service.AuthResponse, error)
-	loginFunc  func(ctx context.Context, input service.LoginInput) (*service.AuthResponse, error)
-	meFunc     func(ctx context.Context, userID uint) (*service.MeResponse, error)
+	signupFunc        func(ctx context.Context, input service.SignupInput) (*service.AuthResponse, error)
+	loginFunc         func(ctx context.Context, input service.LoginInput) (*service.AuthResponse, error)
+	meFunc            func(ctx context.Context, userID uint) (*service.MeResponse, error)
+	deleteAccountFunc func(context.Context, uint) error
 }
 
 func (f *fakeAuthService) Signup(ctx context.Context, input service.SignupInput) (*service.AuthResponse, error) {
@@ -43,6 +44,10 @@ func (f *fakeAuthService) Me(ctx context.Context, userID uint) (*service.MeRespo
 		return nil, nil
 	}
 	return f.meFunc(ctx, userID)
+}
+
+func (f *fakeAuthService) DeleteAccount(ctx context.Context, userID uint) error {
+	return f.deleteAccountFunc(ctx, userID)
 }
 
 func TestAuthHandler_Signup(t *testing.T) {
@@ -312,14 +317,14 @@ func TestAuthHandler_Me(t *testing.T) {
 			),
 		},
 		{
-			name:      "【異常系】ErrUserNotFound時は500を返すこと",
+			name:      "【異常系】ErrUserNotFound時は401を返すこと",
 			setUserID: true,
 			service: fakeAuthService{
 				meFunc: func(ctx context.Context, userID uint) (*service.MeResponse, error) {
 					return nil, service.ErrUserNotFound
 				},
 			},
-			wantAppError: httpx.Internal("internal server error", service.ErrUserNotFound),
+			wantAppError: httpx.Unauthorized("authenticated user no longer exists", service.ErrUserNotFound),
 		},
 		{
 			name:      "【異常系】想定外エラー時は500を返すこと",
@@ -363,6 +368,66 @@ func TestAuthHandler_Me(t *testing.T) {
 			var got service.MeResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 			require.Equal(t, tt.wantResponse, &got)
+		})
+	}
+}
+
+func TestAuthHandler_DeleteAccount(t *testing.T) {
+	t.Run("【正常系】bodyやqueryの他人のIDを使わず204を返す", func(t *testing.T) {
+		called := false
+		svc := &fakeAuthService{deleteAccountFunc: func(_ context.Context, userID uint) error {
+			called = true
+			require.Equal(t, uint(7), userID)
+			return nil
+		}}
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodDelete, "/me?user_id=999", strings.NewReader(`{"user_id":999,"id":999}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set(authUserIDContextKey, uint(7))
+		require.NoError(t, NewAuthHandler(svc).DeleteAccount(c))
+		require.True(t, called)
+		require.Equal(t, http.StatusNoContent, rec.Code)
+		require.Empty(t, rec.Body.String())
+	})
+	for _, tt := range []struct {
+		name   string
+		setID  bool
+		userID uint
+	}{
+		{"認証情報なし", false, 0}, {"IDが0", true, 0},
+	} {
+		t.Run("【異常系】"+tt.name, func(t *testing.T) {
+			e := echo.New()
+			c := e.NewContext(httptest.NewRequest(http.MethodDelete, "/me", nil), httptest.NewRecorder())
+			if tt.setID {
+				c.Set(authUserIDContextKey, tt.userID)
+			}
+			err := NewAuthHandler(&fakeAuthService{}).DeleteAccount(c)
+			var appErr *httpx.AppError
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, http.StatusUnauthorized, appErr.Status)
+		})
+	}
+	for _, tt := range []struct {
+		name       string
+		serviceErr error
+		status     int
+		message    string
+	}{
+		{"削除済み", service.ErrUserNotFound, 401, "authenticated user no longer exists"},
+		{"DBエラー", errors.New("private database details"), 500, "internal server error"},
+	} {
+		t.Run("【異常系】"+tt.name, func(t *testing.T) {
+			e := echo.New()
+			c := e.NewContext(httptest.NewRequest(http.MethodDelete, "/me", nil), httptest.NewRecorder())
+			c.Set(authUserIDContextKey, uint(7))
+			svc := &fakeAuthService{deleteAccountFunc: func(context.Context, uint) error { return tt.serviceErr }}
+			var appErr *httpx.AppError
+			require.ErrorAs(t, NewAuthHandler(svc).DeleteAccount(c), &appErr)
+			require.Equal(t, tt.status, appErr.Status)
+			require.Equal(t, tt.message, appErr.Message)
 		})
 	}
 }

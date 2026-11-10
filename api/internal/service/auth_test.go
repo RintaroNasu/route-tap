@@ -17,6 +17,7 @@ type fakeAuthRepo struct {
 	createUser  func(ctx context.Context, user *models.User) error
 	findByEmail func(ctx context.Context, email string) (*models.User, error)
 	findByID    func(ctx context.Context, id uint) (*models.User, error)
+	deleteUser  func(context.Context, uint) error
 }
 
 func (f *fakeAuthRepo) CreateUser(ctx context.Context, user *models.User) error {
@@ -38,6 +39,10 @@ func (f *fakeAuthRepo) FindUserByID(ctx context.Context, id uint) (*models.User,
 		return nil, nil
 	}
 	return f.findByID(ctx, id)
+}
+
+func (f *fakeAuthRepo) DeleteUser(ctx context.Context, userID uint) error {
+	return f.deleteUser(ctx, userID)
 }
 
 type fakeJWTManager struct {
@@ -424,4 +429,47 @@ func TestAuthService_Me(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthService_DeleteAccount(t *testing.T) {
+	t.Run("【正常系】認証済みユーザーIDだけを削除する", func(t *testing.T) {
+		called := false
+		repo := &fakeAuthRepo{deleteUser: func(_ context.Context, userID uint) error {
+			called = true
+			require.Equal(t, uint(7), userID)
+			return nil
+		}}
+		require.NoError(t, NewAuthService(repo, &fakeJWTManager{}).DeleteAccount(context.Background(), 7))
+		require.True(t, called)
+	})
+	t.Run("【異常系】IDが0ならDBを呼ばない", func(t *testing.T) {
+		repo := &fakeAuthRepo{deleteUser: func(context.Context, uint) error {
+			t.Fatal("不正なIDで削除してはいけない")
+			return nil
+		}}
+		require.ErrorIs(t, NewAuthService(repo, &fakeJWTManager{}).DeleteAccount(context.Background(), 0), ErrUserNotFound)
+	})
+	dbErr := errors.New("database unavailable")
+	for _, tt := range []struct {
+		name             string
+		repoErr, wantErr error
+	}{
+		{"対象なし", gorm.ErrRecordNotFound, ErrUserNotFound},
+		{"DBエラー", dbErr, dbErr},
+	} {
+		t.Run("【異常系】"+tt.name, func(t *testing.T) {
+			repo := &fakeAuthRepo{deleteUser: func(context.Context, uint) error { return tt.repoErr }}
+			require.ErrorIs(t, NewAuthService(repo, &fakeJWTManager{}).DeleteAccount(context.Background(), 7), tt.wantErr)
+		})
+	}
+}
+
+func TestAuthService_MeRejectsZeroID(t *testing.T) {
+	repo := &fakeAuthRepo{findByID: func(context.Context, uint) (*models.User, error) {
+		t.Fatal("不正なIDで取得してはいけない")
+		return nil, nil
+	}}
+	result, err := NewAuthService(repo, &fakeJWTManager{}).Me(context.Background(), 0)
+	require.ErrorIs(t, err, ErrUserNotFound)
+	require.Nil(t, result)
 }

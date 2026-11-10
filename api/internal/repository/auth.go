@@ -11,6 +11,7 @@ type AuthRepository interface {
 	CreateUser(ctx context.Context, user *models.User) error
 	FindUserByEmail(ctx context.Context, email string) (*models.User, error)
 	FindUserByID(ctx context.Context, id uint) (*models.User, error)
+	DeleteUser(ctx context.Context, userID uint) error
 }
 
 type authRepository struct {
@@ -41,4 +42,15 @@ func (r *authRepository) FindUserByID(ctx context.Context, id uint) (*models.Use
 	}
 
 	return &user, nil
+}
+
+func (r *authRepository) DeleteUser(ctx context.Context, userID uint) error {
+	result := r.db.WithContext(ctx).Where("id = ?", userID).Delete(&models.User{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

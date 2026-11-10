@@ -9,6 +9,7 @@ func Register(e *echo.Echo, authHandler handler.AuthHandler, savedRouteHandler h
 	e.POST("/signup", authHandler.Signup)
 	e.POST("/login", authHandler.Login)
 	e.GET("/me", authHandler.Me, authMiddleware)
+	e.DELETE("/me", authHandler.DeleteAccount, authMiddleware)
 	e.POST("/routes", savedRouteHandler.Create, authMiddleware)
 	e.GET("/routes", savedRouteHandler.List, authMiddleware)
 	e.PUT("/routes/:id", savedRouteHandler.Update, authMiddleware)

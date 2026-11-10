@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/RintaroNasu/routetap/api/internal/auth"
 	"github.com/RintaroNasu/routetap/api/internal/httpx"
@@ -13,6 +14,7 @@ type AuthHandler interface {
 	Signup(c echo.Context) error
 	Login(c echo.Context) error
 	Me(c echo.Context) error
+	DeleteAccount(c echo.Context) error
 }
 
 type authHandler struct {
@@ -71,7 +73,7 @@ func (h *authHandler) Login(c echo.Context) error {
 
 func (h *authHandler) Me(c echo.Context) error {
 	userID, ok := auth.UserIDFromContext(c)
-	if !ok {
+	if !ok || userID == 0 {
 		return httpx.Unauthorized("authenticated user is required", errors.New("authenticated user is missing from context"))
 	}
 
@@ -81,6 +83,17 @@ func (h *authHandler) Me(c echo.Context) error {
 	}
 
 	return c.JSON(200, result)
+}
+
+func (h *authHandler) DeleteAccount(c echo.Context) error {
+	userID, ok := auth.UserIDFromContext(c)
+	if !ok || userID == 0 {
+		return httpx.Unauthorized("authenticated user is required", errors.New("authenticated user is missing from context"))
+	}
+	if err := h.authService.DeleteAccount(c.Request().Context(), userID); err != nil {
+		return respondAuthError(err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 func respondAuthError(err error) error {
@@ -96,7 +109,7 @@ func respondAuthError(err error) error {
 	case errors.Is(err, service.ErrInvalidCredentials):
 		return httpx.Unauthorized("email or password is incorrect", err)
 	case errors.Is(err, service.ErrUserNotFound):
-		return httpx.Internal("internal server error", err)
+		return httpx.Unauthorized("authenticated user no longer exists", err)
 	default:
 		return httpx.Internal("internal server error", err)
 	}
