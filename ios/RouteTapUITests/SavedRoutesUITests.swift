@@ -3,6 +3,55 @@ import XCTest
 
 final class SavedRoutesUITests: XCTestCase {
 	@MainActor
+	func testAccountDeletionCancelFailureAndRetry() throws {
+		continueAfterFailure = false
+		XCUIDevice.shared.orientation = .portrait
+		let server = try RouteTestServer(routes: [
+			["id": 1, "name": "削除前の通勤", "origin": "大井町駅", "destination": "浜松町駅"]
+		])
+		defer { server.stop() }
+		let app = XCUIApplication()
+		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = server.baseURL
+		app.launch()
+		login(app)
+		XCTAssertTrue(element("routes.card.1", in: app).waitForExistence(timeout: 5))
+		app.buttons["アカウント"].tap()
+		XCTAssertGreaterThan(
+			app.buttons["auth.deleteAccount"].frame.minY, app.buttons["auth.logout"].frame.minY)
+		let menu = XCTAttachment(screenshot: app.screenshot())
+		menu.name = "アカウントメニュー"
+		menu.lifetime = .keepAlways
+		add(menu)
+		app.buttons["auth.deleteAccount"].tap()
+		let alert = app.alerts["アカウントを削除しますか？"]
+		XCTAssertTrue(alert.waitForExistence(timeout: 5))
+		XCTAssertTrue(alert.staticTexts["アカウントと保存した移動がすべて削除されます。この操作は取り消せません。"].exists)
+		let confirmation = XCTAttachment(screenshot: app.screenshot())
+		confirmation.name = "アカウント削除の確認"
+		confirmation.lifetime = .keepAlways
+		add(confirmation)
+		alert.buttons["キャンセル"].tap()
+		XCTAssertEqual(server.accountDeletionCount(), 0)
+		XCTAssertTrue(element("routes.card.1", in: app).exists)
+		server.failNextAccountDeletion()
+		app.buttons["アカウント"].tap()
+		app.buttons["auth.deleteAccount"].tap()
+		alert.buttons["auth.confirmAccountDeletion"].tap()
+		XCTAssertTrue(app.staticTexts["auth.accountError"].waitForExistence(timeout: 5))
+		XCTAssertTrue(element("routes.card.1", in: app).exists)
+		XCTAssertEqual(server.accountDeletionCount(), 1)
+		app.buttons["アカウント"].tap()
+		app.buttons["auth.deleteAccount"].tap()
+		alert.buttons["auth.confirmAccountDeletion"].tap()
+		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
+		XCTAssertEqual(server.accountDeletionCount(), 2)
+		XCTAssertFalse(element("routes.card.1", in: app).exists)
+		app.terminate()
+		app.launch()
+		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
+	}
+
+	@MainActor
 	func testRegisterRetryAndReloadSavedRoutes() throws {
 		continueAfterFailure = false
 		XCUIDevice.shared.orientation = .portrait
@@ -271,6 +320,9 @@ private final class RouteTestServer {
 	private var updateRequests = 0
 	private var deleteRequests = 0
 	private var nextRouteID = 1
+	private var shouldFailAccountDeletion = false
+	private var accountDeleteRequests = 0
+	private var accountDeleted = false
 	var baseURL: String { "http://127.0.0.1:\(listener.port!.rawValue)" }
 
 	init(routes: [[String: Any]] = []) throws {
@@ -299,6 +351,8 @@ private final class RouteTestServer {
 	}
 
 	func stop() { listener.cancel() }
+	func failNextAccountDeletion() { queue.sync { shouldFailAccountDeletion = true } }
+	func accountDeletionCount() -> Int { queue.sync { accountDeleteRequests } }
 	func failNextSave() { queue.sync { shouldFailSave = true } }
 	func failNextUpdate() { queue.sync { shouldFailUpdate = true } }
 	func failNextDelete() { queue.sync { shouldFailDelete = true } }
@@ -345,7 +399,22 @@ private final class RouteTestServer {
 	private func respond(_ connection: NWConnection, requestLine: String, body: Data) {
 		var status = 200
 		let response: Any?
-		if requestLine.hasPrefix("POST /login ") {
+		if requestLine.hasPrefix("DELETE /me ") {
+			accountDeleteRequests += 1
+			if shouldFailAccountDeletion {
+				shouldFailAccountDeletion = false
+				status = 500
+				response = ["error": ["message": "internal server error"]]
+			} else {
+				accountDeleted = true
+				routes.removeAll()
+				status = 204
+				response = nil
+			}
+		} else if accountDeleted {
+			status = 401
+			response = ["error": ["message": "unauthorized"]]
+		} else if requestLine.hasPrefix("POST /login ") {
 			response = ["token": "ui-test-token"]
 		} else if requestLine.hasPrefix("GET /me ") {
 			response = ["id": 1, "email": "test@example.com"]
