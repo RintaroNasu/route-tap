@@ -27,6 +27,7 @@ type AuthService interface {
 	Signup(ctx context.Context, input SignupInput) (*AuthResponse, error)
 	Login(ctx context.Context, input LoginInput) (*AuthResponse, error)
 	Me(ctx context.Context, userID uint) (*MeResponse, error)
+	DeleteAccount(ctx context.Context, userID uint) error
 }
 
 type SignupInput struct {
@@ -137,6 +138,9 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (*AuthRespons
 }
 
 func (s *authService) Me(ctx context.Context, userID uint) (*MeResponse, error) {
+	if userID == 0 {
+		return nil, ErrUserNotFound
+	}
 	user, err := s.repo.FindUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -153,6 +157,19 @@ func (s *authService) Me(ctx context.Context, userID uint) (*MeResponse, error) 
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: user.UpdatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+func (s *authService) DeleteAccount(ctx context.Context, userID uint) error {
+	if userID == 0 {
+		return ErrUserNotFound
+	}
+	if err := s.repo.DeleteUser(ctx, userID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("delete user: %w", err)
+	}
+	return nil
 }
 
 func normalizeAndValidateCredentials(email string, password string) (string, error) {
