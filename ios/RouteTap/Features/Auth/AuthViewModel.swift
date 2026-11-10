@@ -7,10 +7,12 @@ final class AuthViewModel: ObservableObject {
 		case restoring, signedOut
 		case signedIn(AuthenticatedUser)
 		case unavailable
+		case accountDeleted
 	}
 
 	@Published private(set) var state: State = .restoring
 	@Published private(set) var isBusy = false
+	@Published private(set) var isDeletingAccount = false
 	@Published private(set) var errorMessage: String?
 	private let api: any AuthServicing
 	private let tokens: any TokenStoring
@@ -28,7 +30,7 @@ final class AuthViewModel: ObservableObject {
 	}
 
 	func restore() async {
-		guard !isBusy else { return }
+		guard !isBusy, state != .accountDeleted else { return }
 		isBusy = true
 		defer { isBusy = false }
 		errorMessage = nil
@@ -45,7 +47,7 @@ final class AuthViewModel: ObservableObject {
 	}
 
 	func submit(email: String, password: String, mode: AuthMode) async {
-		guard !isBusy else { return }
+		guard !isBusy, state != .accountDeleted else { return }
 		let email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 		guard !email.isEmpty, !password.isEmpty else {
 			errorMessage = "メールアドレスとパスワードを入力してください。"
@@ -75,6 +77,47 @@ final class AuthViewModel: ObservableObject {
 			}
 		} catch {
 			errorMessage = error.localizedDescription
+		}
+	}
+
+	func deleteAccount() async {
+		guard !isBusy, case .signedIn = state else { return }
+		isBusy = true
+		isDeletingAccount = true
+		errorMessage = nil
+		defer {
+			isDeletingAccount = false
+			isBusy = false
+		}
+		do {
+			guard let token = try tokens.read(), !token.isEmpty else {
+				expireSession()
+				return
+			}
+			try await api.deleteAccount(token: token)
+			finishAccountDeletion()
+		} catch is CancellationError {
+			return
+		} catch AuthError.unauthorized {
+			expireSession()
+		} catch {
+			errorMessage = error.localizedDescription
+		}
+	}
+
+	func retryAccountCleanup() {
+		guard !isBusy, state == .accountDeleted else { return }
+		finishAccountDeletion()
+	}
+
+	private func finishAccountDeletion() {
+		state = .accountDeleted
+		errorMessage = nil
+		do {
+			try tokens.delete()
+			state = .signedOut
+		} catch {
+			errorMessage = "アカウントの削除は完了していますが、この端末のログイン情報を消去できませんでした。再試行してください。"
 		}
 	}
 
