@@ -14,6 +14,7 @@ import (
 	"github.com/RintaroNasu/routetap/api/internal/auth"
 	"github.com/RintaroNasu/routetap/api/internal/handler"
 	"github.com/RintaroNasu/routetap/api/internal/httpx"
+	"github.com/RintaroNasu/routetap/api/internal/models"
 	"github.com/RintaroNasu/routetap/api/internal/service"
 	"github.com/RintaroNasu/routetap/api/route"
 	"github.com/labstack/echo/v4"
@@ -43,11 +44,17 @@ func (f *fakeSavedRouteService) Delete(ctx context.Context, userID, routeID uint
 	return f.delete(ctx, userID, routeID)
 }
 
+type existingUserFinder struct{}
+
+func (existingUserFinder) FindUserByID(_ context.Context, userID uint) (*models.User, error) {
+	return &models.User{ID: userID}, nil
+}
+
 func savedRouteServer(svc service.SavedRouteService) (*echo.Echo, *auth.JWTManager) {
 	e := echo.New()
 	e.HTTPErrorHandler = httpx.HTTPErrorHandler(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	jwtManager := auth.NewJWTManager("test-secret-at-least-32-characters", time.Hour)
-	route.Register(e, handler.NewAuthHandler(nil), handler.NewSavedRouteHandler(svc), auth.Middleware(jwtManager))
+	route.Register(e, handler.NewAuthHandler(nil), handler.NewSavedRouteHandler(svc), auth.Middleware(jwtManager, existingUserFinder{}))
 	return e, jwtManager
 }
 

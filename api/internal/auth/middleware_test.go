@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -8,9 +9,24 @@ import (
 	"time"
 
 	"github.com/RintaroNasu/routetap/api/internal/httpx"
+	"github.com/RintaroNasu/routetap/api/internal/models"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+type fakeUserFinder struct {
+	find  func(context.Context, uint) (*models.User, error)
+	calls int
+}
+
+func (f *fakeUserFinder) FindUserByID(ctx context.Context, userID uint) (*models.User, error) {
+	f.calls++
+	if f.find != nil {
+		return f.find(ctx, userID)
+	}
+	return &models.User{ID: userID}, nil
+}
 
 func TestMiddleware(t *testing.T) {
 	secret := "test-secret"
@@ -73,7 +89,8 @@ func TestMiddleware(t *testing.T) {
 			var gotUserID uint
 			var gotUserIDExists bool
 
-			h := Middleware(validManager)(func(c echo.Context) error {
+			users := &fakeUserFinder{}
+			h := Middleware(validManager, users)(func(c echo.Context) error {
 				nextCalled = true
 				gotUserID, gotUserIDExists = UserIDFromContext(c)
 				return c.NoContent(http.StatusNoContent)
@@ -89,11 +106,13 @@ func TestMiddleware(t *testing.T) {
 				require.Equal(t, tt.wantAppError.Code, appErr.Code)
 				require.Equal(t, tt.wantAppError.Message, appErr.Message)
 				require.False(t, nextCalled)
+				require.Zero(t, users.calls)
 				return
 			}
 
 			require.NoError(t, err)
 			require.True(t, nextCalled)
+			require.Equal(t, 1, users.calls)
 			require.Equal(t, http.StatusNoContent, rec.Code)
 			require.Equal(t, tt.wantUserIDExists, gotUserIDExists)
 			require.Equal(t, tt.wantUserID, gotUserID)
@@ -138,6 +157,47 @@ func TestUserIDFromContext(t *testing.T) {
 
 			require.Equal(t, tt.wantOK, ok)
 			require.Equal(t, tt.wantUserID, got)
+		})
+	}
+}
+
+func TestMiddleware_UserLookup(t *testing.T) {
+	manager := NewJWTManager("test-secret", time.Hour)
+	token, err := manager.GenerateToken(7)
+	require.NoError(t, err)
+	dbErr := errors.New("database unavailable")
+	for _, tt := range []struct {
+		name      string
+		user      *models.User
+		lookupErr error
+		status    int
+	}{
+		{"削除済みユーザー", nil, gorm.ErrRecordNotFound, 401},
+		{"DB接続エラー", nil, dbErr, 500},
+		{"ユーザーが返らない", nil, nil, 401},
+		{"別のユーザーが返る", &models.User{ID: 8}, nil, 401},
+	} {
+		t.Run("【異常系】"+tt.name+"では後続を実行しない", func(t *testing.T) {
+			users := &fakeUserFinder{find: func(ctx context.Context, id uint) (*models.User, error) {
+				require.Equal(t, uint(7), id)
+				return tt.user, tt.lookupErr
+			}}
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/routes", nil)
+			req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+			c := e.NewContext(req, httptest.NewRecorder())
+			nextCalled := false
+			err := Middleware(manager, users)(func(echo.Context) error { nextCalled = true; return nil })(c)
+			var appErr *httpx.AppError
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, tt.status, appErr.Status)
+			require.False(t, nextCalled)
+			_, ok := UserIDFromContext(c)
+			require.False(t, ok)
+			require.Equal(t, 1, users.calls)
+			if tt.lookupErr == dbErr {
+				require.ErrorIs(t, appErr, dbErr)
+			}
 		})
 	}
 }
