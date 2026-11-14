@@ -12,7 +12,7 @@ struct AccountDeletionTests {
 		let api = API()
 		let tokens = Tokens()
 		tokens.token = "saved-token"
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		await model.deleteAccount()
 		#expect(api.deleteCount == 1)
@@ -28,7 +28,7 @@ struct AccountDeletionTests {
 			let api = API()
 			let tokens = Tokens()
 			tokens.token = "saved-token"
-			let model = AuthViewModel(api: api, tokens: tokens)
+			let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 			await model.restoreIfNeeded()
 			api.deleteError = error
 			await model.deleteAccount()
@@ -47,7 +47,7 @@ struct AccountDeletionTests {
 		let api = API()
 		let tokens = Tokens()
 		tokens.token = "expired-token"
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		api.deleteError = AuthError.unauthorized
 		await model.deleteAccount()
@@ -60,7 +60,7 @@ struct AccountDeletionTests {
 		let api = API()
 		let tokens = Tokens()
 		tokens.token = "saved-token"
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		tokens.failDelete = true
 		await model.deleteAccount()
@@ -83,7 +83,7 @@ struct AccountDeletionTests {
 		let api = API()
 		let tokens = Tokens()
 		tokens.token = "saved-token"
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		var continuation: CheckedContinuation<Void, Never>?
 		api.beforeDelete = { await withCheckedContinuation { continuation = $0 } }
@@ -104,7 +104,7 @@ struct AccountDeletionTests {
 	@Test func cancellationAndSignedOutDoNotDeleteLocalSession() async {
 		let api = API()
 		let tokens = Tokens()
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		await model.deleteAccount()
 		#expect(api.deleteCount == 0)

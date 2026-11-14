@@ -17,13 +17,19 @@ final class SavedRoutesViewModel: ObservableObject {
 
 	private let api: any SavedRouteServicing
 	private let tokens: any TokenStoring
+	private let accountID: String?
+	private let widgetStore: any WidgetRouteStoring
 
 	init(
 		api: any SavedRouteServicing = SavedRouteAPI(),
-		tokens: any TokenStoring = KeychainTokenStore()
+		tokens: any TokenStoring = KeychainTokenStore(),
+		accountID: String? = nil,
+		widgetStore: any WidgetRouteStoring = WidgetRouteStore()
 	) {
 		self.api = api
 		self.tokens = tokens
+		self.accountID = accountID
+		self.widgetStore = widgetStore
 	}
 
 	func load() async {
@@ -34,6 +40,7 @@ final class SavedRoutesViewModel: ObservableObject {
 		do {
 			routes = try await api.fetchRoutes(token: token())
 			hasLoaded = true
+			syncWidget()
 		} catch is CancellationError {
 			return
 		} catch SavedRouteError.unauthorized {
@@ -71,6 +78,7 @@ final class SavedRoutesViewModel: ObservableObject {
 				routes.insert(created, at: 0)
 				hasLoaded = true
 			}
+			syncWidget()
 			return true
 		} catch is CancellationError {
 			return false
@@ -96,6 +104,7 @@ final class SavedRoutesViewModel: ObservableObject {
 		do {
 			try await api.deleteRoute(id: route.id, token: token())
 			routes.removeAll { $0.id == route.id }
+			syncWidget()
 			return true
 		} catch is CancellationError {
 			return false
@@ -124,7 +133,13 @@ final class SavedRoutesViewModel: ObservableObject {
 		return token
 	}
 
+	private func syncWidget() {
+		guard let accountID else { return }
+		widgetStore.save(routes, accountID: accountID)
+	}
+
 	private func expireSession() {
+		if let accountID, widgetStore.read()?.accountID == accountID { widgetStore.clear() }
 		routes = []
 		loadError = nil
 		saveError = nil
