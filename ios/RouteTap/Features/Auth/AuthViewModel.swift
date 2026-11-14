@@ -17,10 +17,20 @@ final class AuthViewModel: ObservableObject {
 	private let api: any AuthServicing
 	private let tokens: any TokenStoring
 	private var didRestore = false
+	private let widgetStore: any WidgetRouteStoring
 
-	init(api: any AuthServicing = AuthAPI(), tokens: any TokenStoring = KeychainTokenStore()) {
+	var accountID: String? {
+		guard case .signedIn(let user) = state else { return nil }
+		return "\(APIConfiguration.baseURL?.absoluteString ?? "unconfigured")#\(user.id)"
+	}
+
+	init(
+		api: any AuthServicing = AuthAPI(), tokens: any TokenStoring = KeychainTokenStore(),
+		widgetStore: any WidgetRouteStoring = WidgetRouteStore()
+	) {
 		self.api = api
 		self.tokens = tokens
+		self.widgetStore = widgetStore
 	}
 
 	func restoreIfNeeded() async {
@@ -35,7 +45,8 @@ final class AuthViewModel: ObservableObject {
 		defer { isBusy = false }
 		errorMessage = nil
 		do {
-			guard let token = try tokens.read() else {
+			guard let token = try tokens.read(), !token.isEmpty else {
+				widgetStore.clear()
 				state = .signedOut
 				return
 			}
@@ -111,6 +122,7 @@ final class AuthViewModel: ObservableObject {
 	}
 
 	private func finishAccountDeletion() {
+		widgetStore.clear()
 		state = .accountDeleted
 		errorMessage = nil
 		do {
@@ -125,12 +137,14 @@ final class AuthViewModel: ObservableObject {
 		guard !isBusy else { return }
 		do {
 			try tokens.delete()
+			widgetStore.clear()
 			errorMessage = nil
 			state = .signedOut
 		} catch { errorMessage = error.localizedDescription }
 	}
 
 	func expireSession() {
+		widgetStore.clear()
 		do {
 			try tokens.delete()
 			state = .signedOut
@@ -144,9 +158,16 @@ final class AuthViewModel: ObservableObject {
 	func clearError() { errorMessage = nil }
 
 	private func loadUser(token: String) async throws {
-		do { state = .signedIn(try await api.fetchCurrentUser(token: token)) } catch AuthError
+		do {
+			let user = try await api.fetchCurrentUser(token: token)
+			let accountID =
+				"\(APIConfiguration.baseURL?.absoluteString ?? "unconfigured")#\(user.id)"
+			widgetStore.beginSession(accountID: accountID)
+			state = .signedIn(user)
+		} catch AuthError
 			.unauthorized
 		{
+			widgetStore.clear()
 			try tokens.delete()
 			state = .signedOut
 			errorMessage = "ログインの有効期限が切れました。再度ログインしてください。"

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SavedRoutesView: View {
-	@StateObject private var viewModel = SavedRoutesViewModel()
+	@StateObject private var viewModel: SavedRoutesViewModel
 	@State private var activeForm: RouteForm?
 	@State private var routeToDelete: SavedRoute?
 	@State private var showingDeleteConfirmation = false
@@ -14,6 +14,19 @@ struct SavedRoutesView: View {
 	let onLogout: () -> Void
 	let onSessionExpired: () -> Void
 	let onDeleteAccount: () async -> Void
+
+	init(
+		accountID: String, accountError: String?, isDeletingAccount: Bool,
+		onLogout: @escaping () -> Void, onSessionExpired: @escaping () -> Void,
+		onDeleteAccount: @escaping () async -> Void
+	) {
+		_viewModel = StateObject(wrappedValue: SavedRoutesViewModel(accountID: accountID))
+		self.accountError = accountError
+		self.isDeletingAccount = isDeletingAccount
+		self.onLogout = onLogout
+		self.onSessionExpired = onSessionExpired
+		self.onDeleteAccount = onDeleteAccount
+	}
 
 	private struct RouteForm: Identifiable {
 		let id = UUID()
