@@ -1,6 +1,6 @@
 import Foundation
 
-struct SavedRoute: Decodable, Identifiable, Equatable {
+struct SavedRoute: Codable, Identifiable, Equatable {
 	let id: UInt
 	let name: String
 	let origin: String
