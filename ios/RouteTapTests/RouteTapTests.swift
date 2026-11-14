@@ -61,7 +61,7 @@ struct RouteTapTests {
 	@Test func loginNormalizesEmailAndPersistsSession() async {
 		let api = API()
 		let tokens = TokenStore()
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		#expect(model.state == .signedOut)
 		await model.submit(
@@ -80,7 +80,7 @@ struct RouteTapTests {
 		let api = API()
 		api.authenticateError = .duplicateEmail
 		let tokens = TokenStore()
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		await model.submit(email: "test@example.com", password: "password", mode: .signup)
 		#expect(api.submittedMode == .signup)
@@ -93,7 +93,7 @@ struct RouteTapTests {
 		let api = API()
 		let tokens = TokenStore()
 		tokens.token = "saved-token"
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		#expect(model.state == .signedIn(api.user))
 	}
@@ -103,7 +103,7 @@ struct RouteTapTests {
 		api.profileError = .unauthorized
 		let tokens = TokenStore()
 		tokens.token = "expired-token"
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		#expect(model.state == .signedOut)
 		#expect(tokens.token == nil)
@@ -114,7 +114,7 @@ struct RouteTapTests {
 		let api = API()
 		api.profileError = .connection
 		let tokens = TokenStore()
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		await model.submit(email: "test@example.com", password: "password", mode: .signup)
 		#expect(model.state == .unavailable)
@@ -128,7 +128,7 @@ struct RouteTapTests {
 		let api = API()
 		let tokens = TokenStore()
 		tokens.failSave = true
-		let model = AuthViewModel(api: api, tokens: tokens)
+		let model = AuthViewModel(api: api, tokens: tokens, widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		await model.submit(email: "test@example.com", password: "password", mode: .login)
 		#expect(model.state == .signedOut)
@@ -137,7 +137,7 @@ struct RouteTapTests {
 
 	@Test func invalidInputDoesNotCallAPI() async {
 		let api = API()
-		let model = AuthViewModel(api: api, tokens: TokenStore())
+		let model = AuthViewModel(api: api, tokens: TokenStore(), widgetStore: WidgetTestStore())
 		await model.restoreIfNeeded()
 		await model.submit(email: "", password: "", mode: .login)
 		#expect(api.submittedEmail == nil)
