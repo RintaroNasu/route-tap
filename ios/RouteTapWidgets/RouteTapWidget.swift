@@ -110,6 +110,7 @@ struct RouteWidgetView: View {
 				)
 				.font(.subheadline.weight(.semibold))
 				.frame(maxWidth: .infinity).padding(.vertical, 9)
+				.contentShape(Rectangle())
 				.foregroundStyle(direction == .outbound ? .white : green)
 				.background(
 					direction == .outbound ? green : green.opacity(0.1),

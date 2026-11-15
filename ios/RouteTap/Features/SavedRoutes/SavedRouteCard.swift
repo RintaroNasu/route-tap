@@ -63,6 +63,7 @@ struct SavedRouteCard: View {
 				.font(.title3.weight(.semibold))
 				.foregroundStyle(.secondary)
 				.frame(width: 44, height: 44)
+				.contentShape(Rectangle())
 		}
 		.disabled(actionsDisabled)
 		.accessibilityLabel("\(route.name)の操作")
@@ -78,6 +79,7 @@ struct SavedRouteCard: View {
 					Text(choice.title)
 						.font(.subheadline.weight(.semibold))
 						.frame(maxWidth: .infinity, minHeight: 44)
+						.contentShape(Rectangle())
 				}
 				.buttonStyle(.plain)
 				.foregroundStyle(direction == choice ? Color.white : Color.secondary)
@@ -114,6 +116,7 @@ struct SavedRouteCard: View {
 			Label("Google Mapsで開く", systemImage: "arrow.up.right.square")
 				.font(.headline)
 				.frame(maxWidth: .infinity, minHeight: 54)
+				.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
 		.foregroundStyle(.white)

@@ -12,13 +12,15 @@ final class RouteTapUITests: XCTestCase {
 		XCTAssertTrue(app.staticTexts["auth.heading"].waitForExistence(timeout: 10))
 		XCTAssertEqual(app.staticTexts["auth.heading"].label, "ログイン")
 		XCTAssertTrue(app.staticTexts["RouteTap"].exists)
-		app.buttons["auth.submit"].tap()
+		app.buttons["auth.submit"].coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
+			.tap()
 		XCTAssertTrue(app.staticTexts["auth.error"].exists)
 		let login = XCTAttachment(screenshot: app.screenshot())
 		login.name = "ログイン"
 		login.lifetime = .keepAlways
 		add(login)
-		app.buttons["auth.switch"].tap()
+		app.buttons["auth.switch"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+			.tap()
 		XCTAssertEqual(app.staticTexts["auth.heading"].label, "新規登録")
 		XCTAssertFalse(app.staticTexts["auth.error"].exists)
 		XCTAssertTrue(app.buttons["auth.submit"].label.contains("アカウントを作成"))
@@ -27,11 +29,12 @@ final class RouteTapUITests: XCTestCase {
 		signup.name = "新規登録"
 		signup.lifetime = .keepAlways
 		add(signup)
-		app.buttons["パスワードを表示"].tap()
+		app.buttons["パスワードを表示"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
 		XCTAssertTrue(app.textFields["auth.password"].exists)
-		app.buttons["パスワードを隠す"].tap()
+		app.buttons["パスワードを隠す"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
 		XCTAssertTrue(app.secureTextFields["auth.password"].exists)
-		app.buttons["auth.switch"].tap()
+		app.buttons["auth.switch"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+			.tap()
 		XCTAssertEqual(app.staticTexts["auth.heading"].label, "ログイン")
 	}
 }

@@ -111,6 +111,7 @@ struct AuthView: View {
 					Image(systemName: passwordVisible ? "eye.slash" : "eye")
 						.foregroundStyle(.secondary)
 						.frame(width: 44, height: 44)
+						.contentShape(Rectangle())
 				}
 				.accessibilityLabel(passwordVisible ? "パスワードを隠す" : "パスワードを表示")
 			}
@@ -142,6 +143,7 @@ struct AuthView: View {
 				Text(mode.buttonTitle).fontWeight(.semibold)
 			}
 			.frame(maxWidth: .infinity, minHeight: 54)
+			.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
 		.foregroundStyle(.white)
@@ -159,16 +161,19 @@ struct AuthView: View {
 			Text(mode == .login ? "アカウントをお持ちでない方" : "すでにアカウントをお持ちの方")
 				.font(.subheadline)
 				.foregroundStyle(.secondary)
-			Button(mode == .login ? "新規登録" : "ログイン") {
+			Button {
 				mode = mode == .login ? .signup : .login
 				password = ""
 				passwordVisible = false
 				focusedField = nil
 				viewModel.clearError()
+			} label: {
+				Text(mode == .login ? "新規登録" : "ログイン")
+					.font(.subheadline.weight(.semibold))
+					.frame(minWidth: 44, minHeight: 44)
+					.contentShape(Rectangle())
 			}
-			.font(.subheadline.weight(.semibold))
 			.tint(green)
-			.frame(minHeight: 44)
 			.disabled(viewModel.isBusy)
 			.accessibilityIdentifier("auth.switch")
 		}
