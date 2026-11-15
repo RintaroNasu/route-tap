@@ -1,0 +1,10 @@
+**/.env
+**/.env.*
+**/.git
+**/.DS_Store
+**/*_test.go
+coverage*
+*.out
+*.log
+docker-compose*.yml
+docker-compose*.yaml
