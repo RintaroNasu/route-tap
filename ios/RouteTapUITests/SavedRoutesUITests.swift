@@ -68,23 +68,15 @@ final class SavedRoutesUITests: XCTestCase {
 			.tap()
 		XCTAssertTrue(app.staticTexts["routes.saveError"].exists)
 
+		element("routes.name", in: app).tap()
 		for (field, value) in [
 			("name", "会社への移動"), ("origin", "大井町駅、東京都品川区"), ("destination", "浜松町駅、東京都港区"),
 		] {
 			let input = element("routes." + field, in: app)
-			if field == "destination" {
-				app.keyboards.buttons.matching(
-					NSPredicate(
-						format: "identifier ==[c] %@ OR label IN %@", "next", ["Next", "次へ"])
-				).firstMatch.tap()
-			} else {
-				input.tap()
-			}
 			input.typeText(value)
+			XCTAssertEqual(input.value as? String, value)
+			input.typeText("\n")
 		}
-		app.keyboards.buttons.matching(
-			NSPredicate(format: "identifier ==[c] %@ OR label == %@", "done", "完了")
-		).firstMatch.tap()
 		XCTAssertEqual(
 			XCTWaiter.wait(
 				for: [
