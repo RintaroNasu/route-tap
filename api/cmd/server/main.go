@@ -82,7 +82,7 @@ func newServer(conn *gorm.DB, secret string) *echo.Echo {
 	e.HidePort = true
 	e.HTTPErrorHandler = httpx.HTTPErrorHandler(slog.Default())
 	e.Use(httpx.RecoverMiddleware())
-	jwtManager := auth.NewJWTManager(secret, time.Hour)
+	jwtManager := auth.NewJWTManager(secret, 30*24*time.Hour)
 	authRepository := repository.NewAuthRepository(conn)
 	authService := service.NewAuthService(authRepository, jwtManager)
 	savedRouteRepository := repository.NewSavedRouteRepository(conn)
