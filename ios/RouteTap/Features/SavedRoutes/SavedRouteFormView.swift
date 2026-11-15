@@ -68,6 +68,7 @@ struct SavedRouteFormView: View {
 				.font(.title3.weight(.semibold))
 				.foregroundStyle(.primary)
 				.frame(width: 44, height: 44)
+				.contentShape(Rectangle())
 		}
 		.disabled(viewModel.isSaving)
 		.accessibilityLabel("閉じる")
@@ -114,6 +115,7 @@ struct SavedRouteFormView: View {
 				Text(route == nil ? "保存" : "変更を保存").font(.headline)
 			}
 			.frame(maxWidth: .infinity, minHeight: 56)
+			.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
 		.foregroundStyle(.white)

@@ -128,6 +128,7 @@ struct SavedRoutesView: View {
 						.font(.title2)
 						.foregroundStyle(.secondary)
 						.frame(width: 44, height: 44)
+						.contentShape(Rectangle())
 				}
 				.accessibilityLabel("アカウント")
 				Button {
@@ -136,6 +137,7 @@ struct SavedRoutesView: View {
 					Image(systemName: "plus")
 						.font(.system(size: 23, weight: .medium))
 						.frame(width: 48, height: 48)
+						.contentShape(Rectangle())
 						.background(.tint.opacity(0.09), in: Circle())
 				}
 				.disabled(viewModel.isBusy)
