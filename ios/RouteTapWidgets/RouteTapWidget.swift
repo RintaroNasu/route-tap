@@ -10,7 +10,7 @@ struct RouteTapWidgets: WidgetBundle {
 struct RouteTapWidget: Widget {
 	var body: some WidgetConfiguration {
 		AppIntentConfiguration(
-			kind: WidgetRouteStore.widgetKind,
+			kind: SavedRouteStore.widgetKind,
 			intent: RouteWidgetConfiguration.self,
 			provider: RouteWidgetProvider()
 		) { entry in
@@ -25,14 +25,14 @@ struct RouteTapWidget: Widget {
 
 struct RouteWidgetEntry: TimelineEntry {
 	let date: Date
-	let accountID: String?
 	let route: SavedRoute?
 	let message: String
 
 	static var preview: RouteWidgetEntry {
 		RouteWidgetEntry(
-			date: .now, accountID: "preview",
-			route: SavedRoute(id: 1, name: "通勤", origin: "大井町駅", destination: "浜松町駅"), message: "")
+			date: .now,
+			route: SavedRoute(id: UUID(), name: "通勤", origin: "大井町駅", destination: "浜松町駅"),
+			message: "")
 	}
 }
 
@@ -52,20 +52,19 @@ struct RouteWidgetProvider: AppIntentTimelineProvider {
 	}
 
 	private func entry(for configuration: RouteWidgetConfiguration) -> RouteWidgetEntry {
-		let snapshot = WidgetRouteStore().read()
-		let route = snapshot?.routes.first {
-			snapshot?.entityID(for: $0) == configuration.route?.id
+		do {
+			let routes = try SavedRouteStore().load()
+			let route = routes.first { $0.id.uuidString == configuration.route?.id }
+			let message =
+				configuration.route == nil
+				? "長押しして「ウィジェットを編集」から移動を選んでください"
+				: "移動が見つかりません。ウィジェットの移動を選び直してください"
+			return RouteWidgetEntry(date: .now, route: route, message: message)
+		} catch {
+			return RouteWidgetEntry(
+				date: .now, route: nil,
+				message: "移動を読み込めません。RouteTapを開いて確認してください")
 		}
-		let message: String
-		if snapshot == nil {
-			message = "RouteTapでログインしてください"
-		} else if configuration.route == nil {
-			message = "長押しして「ウィジェットを編集」から移動を選んでください"
-		} else {
-			message = "移動が見つかりません。ウィジェットの移動を選び直してください"
-		}
-		return RouteWidgetEntry(
-			date: .now, accountID: snapshot?.accountID, route: route, message: message)
 	}
 }
 
@@ -77,14 +76,14 @@ struct RouteWidgetView: View {
 		VStack(alignment: .leading, spacing: 10) {
 			Label("RouteTap", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
 				.font(.caption.weight(.bold)).foregroundStyle(green)
-			if let route = entry.route, let accountID = entry.accountID {
+			if let route = entry.route {
 				Text(route.name).font(.headline).lineLimit(1)
 				Text("\(route.origin) → \(route.destination)")
 					.font(.caption).foregroundStyle(.secondary).lineLimit(1)
 				Spacer(minLength: 0)
 				HStack(spacing: 10) {
-					routeLink(route, accountID: accountID, direction: .outbound)
-					routeLink(route, accountID: accountID, direction: .inbound)
+					routeLink(route, direction: .outbound)
+					routeLink(route, direction: .inbound)
 				}
 			} else {
 				Spacer(minLength: 0)
@@ -97,10 +96,10 @@ struct RouteWidgetView: View {
 	}
 
 	@ViewBuilder
-	private func routeLink(_ route: SavedRoute, accountID: String, direction: RouteDirection)
+	private func routeLink(_ route: SavedRoute, direction: RouteDirection)
 		-> some View
 	{
-		if let url = WidgetRouteLink(accountID: accountID, routeID: route.id, direction: direction)
+		if let url = WidgetRouteLink(routeID: route.id, direction: direction)
 			.url
 		{
 			Link(destination: url) {
@@ -125,5 +124,5 @@ struct RouteWidgetView: View {
 	RouteTapWidget()
 } timeline: {
 	RouteWidgetEntry.preview
-	RouteWidgetEntry(date: .now, accountID: nil, route: nil, message: "RouteTapでログインしてください")
+	RouteWidgetEntry(date: .now, route: nil, message: "RouteTapで移動を登録してください")
 }

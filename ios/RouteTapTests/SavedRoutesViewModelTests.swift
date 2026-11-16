@@ -3,275 +3,167 @@ import Testing
 
 @testable import RouteTap
 
+final class TestRouteStore: SavedRouteStoring {
+	var routes: [SavedRoute] = []
+	var loadError: Error?
+	var saveError: Error?
+	var saves = 0
+
+	func load() throws -> [SavedRoute] {
+		if let loadError { throw loadError }
+		return routes
+	}
+
+	func save(_ routes: [SavedRoute]) throws {
+		if let saveError { throw saveError }
+		self.routes = routes
+		saves += 1
+	}
+}
+
 @MainActor
 struct SavedRoutesViewModelTests {
-	final class Tokens: TokenStoring {
-		var token: String? = "saved-token"
-		var readError: Error?
-		func read() throws -> String? {
-			if let readError { throw readError }
-			return token
-		}
-		func save(_ token: String) throws { self.token = token }
-		func delete() throws { token = nil }
-	}
+	let input = SavedRouteInput(name: "通勤", origin: "大井町駅", destination: "浜松町駅")
 
-	final class API: SavedRouteServicing {
-		var routes: [SavedRoute] = []
-		var fetchError: Error?
-		var createError: Error?
-		var updateError: Error?
-		var deleteError: Error?
-		var updatedID: UInt?
-		var deletedID: UInt?
-		var updatedToken: String?
-		var deletedToken: String?
-		var updatedInput: SavedRouteInput?
-		var updateCount = 0
-		var deleteCount = 0
-		var fetchCount = 0
-		var beforeFetch: (() async -> Void)?
-		var beforeUpdate: (() async -> Void)?
-		var beforeDelete: (() async -> Void)?
-		var fetchedToken: String?
-		var createdToken: String?
-		var submittedInput: SavedRouteInput?
-		var createCount = 0
-		var beforeCreate: (() async -> Void)?
-		let createdRoute = SavedRoute(id: 12, name: "通勤", origin: "大井町駅", destination: "浜松町駅")
-
-		func fetchRoutes(token: String) async throws -> [SavedRoute] {
-			fetchedToken = token
-			fetchCount += 1
-			await beforeFetch?()
-			if let fetchError { throw fetchError }
-			return routes
-		}
-
-		func createRoute(input: SavedRouteInput, token: String) async throws -> SavedRoute {
-			createCount += 1
-			submittedInput = input
-			createdToken = token
-			await beforeCreate?()
-			if let createError { throw createError }
-			return createdRoute
-		}
-		func updateRoute(id: UInt, input: SavedRouteInput, token: String) async throws -> SavedRoute
-		{
-			updateCount += 1
-			updatedID = id
-			updatedInput = input
-			updatedToken = token
-			await beforeUpdate?()
-			if let updateError { throw updateError }
-			return SavedRoute(
-				id: id, name: input.name, origin: input.origin, destination: input.destination)
-		}
-
-		func deleteRoute(id: UInt, token: String) async throws {
-			deleteCount += 1
-			deletedID = id
-			deletedToken = token
-			await beforeDelete?()
-			if let deleteError { throw deleteError }
-		}
-
-	}
-
-	let validInput = SavedRouteInput(name: "通勤", origin: "大井町駅", destination: "浜松町駅")
-
-	@Test func loadUsesSavedTokenAndReturnsRoutes() async {
-		let api = API()
-		api.routes = [api.createdRoute]
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
+	@Test func createsAndReloadsWithoutAuthentication() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
 		await model.load()
-		#expect(api.fetchedToken == "saved-token")
-		#expect(model.routes == api.routes)
 		#expect(model.hasLoaded)
-		#expect(!model.isLoading)
-		#expect(model.loadError == nil)
-	}
-
-	@Test func emptyListIsACompletedLoad() async {
-		let model = SavedRoutesViewModel(api: API(), tokens: Tokens())
-		await model.load()
 		#expect(model.routes.isEmpty)
-		#expect(model.hasLoaded)
+		#expect(await model.save(input))
+		#expect(store.routes == model.routes)
+		let reopened = SavedRoutesViewModel(store: store)
+		await reopened.load()
+		#expect(reopened.routes == model.routes)
+		#expect(reopened.loadError == nil)
 	}
 
-	@Test func saveTrimsInputAndInsertsSuccessfulResponseAtTop() async {
-		let api = API()
-		let oldRoute = SavedRoute(id: 1, name: "帰宅", origin: "浜松町駅", destination: "大井町駅")
-		api.routes = [oldRoute]
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		await model.load()
-		let saved = await model.save(
-			SavedRouteInput(name: " 通勤　", origin: "　大井町駅 ", destination: "浜松町駅\n"))
-		#expect(saved)
-		#expect(api.submittedInput == validInput)
-		#expect(api.createdToken == "saved-token")
-		#expect(model.routes == [api.createdRoute, oldRoute])
-		#expect(!model.isSaving)
+	@Test func trimsInputsAndAssignsDistinctStableIDs() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
+		#expect(
+			await model.save(SavedRouteInput(name: " 通勤　", origin: "　大井町駅 ", destination: "浜松町駅\n"))
+		)
+		let first = try #require(model.routes.first)
+		#expect(first.name == input.name)
+		#expect(first.origin == input.origin)
+		#expect(first.destination == input.destination)
+		#expect(await model.save(input))
+		#expect(model.routes.count == 2)
+		#expect(model.routes[0].id != first.id)
+		#expect(model.routes[1].id == first.id)
 	}
 
-	@Test func invalidInputDoesNotSendRequest() async {
-		let inputs = [
-			SavedRouteInput(name: "　", origin: "大井町駅", destination: "浜松町駅"),
-			SavedRouteInput(name: "通勤", origin: "", destination: "浜松町駅"),
-			SavedRouteInput(name: "通勤", origin: "大井町駅", destination: " "),
+	@Test func validatesEmptyFieldsAndUnicodeLengthBeforeWriting() async {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
+		for invalid in [
+			SavedRouteInput(name: "　", origin: "駅", destination: "駅"),
+			SavedRouteInput(name: "名", origin: "", destination: "駅"),
+			SavedRouteInput(name: "名", origin: "駅", destination: "\n"),
 			SavedRouteInput(
 				name: String(repeating: "名", count: 101), origin: "駅", destination: "駅"),
 			SavedRouteInput(
-				name: "通勤", origin: String(repeating: "駅", count: 501), destination: "駅"),
+				name: "名", origin: String(repeating: "駅", count: 501), destination: "駅"),
 			SavedRouteInput(
-				name: "通勤", origin: "駅", destination: String(repeating: "駅", count: 501)),
-		]
-		for input in inputs {
-			let api = API()
-			let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-			let saved = await model.save(input)
-			#expect(!saved)
-			#expect(api.createCount == 0)
+				name: "名", origin: "駅", destination: String(repeating: "駅", count: 501)),
+			SavedRouteInput(
+				name: String(repeating: "か\u{3099}", count: 51), origin: "駅", destination: "駅"),
+		] {
+			#expect(await model.save(invalid) == false)
 			#expect(model.saveError != nil)
 		}
+		#expect(store.saves == 0)
+		#expect(
+			await model.save(
+				SavedRouteInput(
+					name: String(repeating: "名", count: 100),
+					origin: String(repeating: "駅", count: 500),
+					destination: String(repeating: "駅", count: 500))))
 	}
 
-	@Test func unicodeLengthUsesTheSameUnitsAsGo() async {
-		let api = API()
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		let input = SavedRouteInput(
-			name: String(repeating: "か\u{3099}", count: 51), origin: "駅", destination: "駅")
-		#expect(input.name.count == 51)
-		#expect(input.name.unicodeScalars.count == 102)
-		#expect(await model.save(input) == false)
-		#expect(api.createCount == 0)
-		#expect(model.saveError == "表示名は100文字以内で入力してください。")
-	}
-
-	@Test func exactLengthLimitsAreAccepted() async {
-		let api = API()
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		let input = SavedRouteInput(
-			name: String(repeating: "名", count: 100), origin: String(repeating: "駅", count: 500),
-			destination: String(repeating: "先", count: 500))
+	@Test func updatesOnlyTargetAndKeepsItsIDAndPosition() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
 		#expect(await model.save(input))
-		#expect(api.createCount == 1)
+		let target = try #require(model.routes.first)
+		#expect(await model.save(input))
+		let other = try #require(model.routes.first)
+		#expect(
+			await model.save(
+				SavedRouteInput(name: "平日通勤", origin: "新宿駅", destination: "渋谷駅"), editing: target))
+		#expect(model.routes.map(\.id) == [other.id, target.id])
+		#expect(model.routes.last?.name == "平日通勤")
+		#expect(store.routes == model.routes)
 	}
 
-	@Test func failedSaveDoesNotInsertAndCanBeRetried() async {
-		let api = API()
-		api.createError = SavedRouteError.connection
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		#expect(await model.save(validInput) == false)
+	@Test func deletesOnlyTargetAndPersistsEmptyList() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
+		#expect(await model.save(input))
+		let first = try #require(model.routes.first)
+		#expect(await model.save(input))
+		let second = try #require(model.routes.first)
+		#expect(await model.delete(first))
+		#expect(store.routes == [second])
+		#expect(await model.delete(second))
+		#expect(store.routes.isEmpty)
 		#expect(model.routes.isEmpty)
-		#expect(model.saveError == SavedRouteError.connection.localizedDescription)
-		#expect(!model.isSaving)
+	}
+
+	@Test func failedCreateUpdateAndDeletePreserveListAndAllowRetry() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
+		#expect(await model.save(input))
+		let original = model.routes
+		let route = try #require(original.first)
+		store.saveError = SavedRouteStorageError.writeFailed
+		#expect(await model.save(input) == false)
+		#expect(await model.save(input, editing: route) == false)
+		#expect(model.saveError != nil)
+		#expect(await model.delete(route) == false)
+		#expect(model.deleteError != nil)
+		#expect(model.routes == original)
+		#expect(store.routes == original)
+		#expect(!model.isBusy)
+		store.saveError = nil
+		model.clearDeleteError()
 		model.clearSaveError()
+		#expect(model.deleteError == nil)
 		#expect(model.saveError == nil)
-		api.createError = nil
-		#expect(await model.save(validInput))
-		#expect(model.routes == [api.createdRoute])
+		#expect(await model.delete(route))
 	}
 
-	@Test func refreshFailurePreservesPreviouslyLoadedRoutesAndAllowsRetry() async {
-		let api = API()
-		api.routes = [api.createdRoute]
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		await model.load()
-		api.fetchError = SavedRouteError.server
-		await model.load()
-		#expect(model.routes == [api.createdRoute])
-		#expect(model.hasLoaded)
-		#expect(model.loadError == SavedRouteError.server.localizedDescription)
-		#expect(!model.isLoading)
-		api.fetchError = nil
-		await model.load()
-		#expect(model.loadError == nil)
-	}
-
-	@Test func failedInitialLoadDoesNotLookLikeAnEmptyList() async {
-		let api = API()
-		api.fetchError = SavedRouteError.connection
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
+	@Test func readFailureDoesNotLookLikeEmptyDataOrAllowOverwrite() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
+		store.loadError = SavedRouteStorageError.readFailed
 		await model.load()
 		#expect(!model.hasLoaded)
 		#expect(model.loadError != nil)
+		#expect(await model.save(input) == false)
+		#expect(store.saves == 0)
+		store.loadError = nil
+		#expect(await model.save(input))
+		let original = model.routes
+		let route = try #require(original.first)
+		store.loadError = SavedRouteStorageError.readFailed
+		await model.load()
+		#expect(model.routes == original)
+		#expect(model.hasLoaded)
+		#expect(await model.delete(route) == false)
+		#expect(model.routes == original)
 	}
 
-	@Test func unauthorizedRefreshRemovesVisibleRoutes() async {
-		let api = API()
-		api.routes = [api.createdRoute]
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		await model.load()
-		api.fetchError = SavedRouteError.unauthorized
-		await model.load()
-		#expect(model.routes.isEmpty)
-		#expect(model.sessionExpired)
-	}
-
-	@Test func missingTokenAndUnauthorizedSaveExpireSession() async {
-		let tokens = Tokens()
-		tokens.token = nil
-		let api = API()
-		let model = SavedRoutesViewModel(api: api, tokens: tokens)
-		await model.load()
-		#expect(model.sessionExpired)
-		#expect(api.fetchedToken == nil)
-
-		api.createError = SavedRouteError.unauthorized
-		let saveModel = SavedRoutesViewModel(api: api, tokens: Tokens())
-		#expect(await saveModel.save(validInput) == false)
-		#expect(saveModel.sessionExpired)
-		#expect(saveModel.routes.isEmpty)
-	}
-
-	@Test func keychainReadFailureDoesNotSendRequest() async {
-		let tokens = Tokens()
-		tokens.readError = AuthError.keychain
-		let api = API()
-		let model = SavedRoutesViewModel(api: api, tokens: tokens)
-		await model.load()
-		#expect(api.fetchedToken == nil)
-		#expect(model.loadError == AuthError.keychain.localizedDescription)
-	}
-
-	@Test func cancellationDoesNotShowAnError() async {
-		let api = API()
-		api.fetchError = CancellationError()
-		api.createError = CancellationError()
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		await model.load()
-		#expect(model.loadError == nil)
-		#expect(await model.save(validInput) == false)
-		#expect(model.saveError == nil)
-		#expect(!model.isSaving)
-	}
-
-	@Test func savingPreventsDuplicateRequestsAndConcurrentRefresh() async {
-		let api = API()
-		var continuation: CheckedContinuation<Void, Never>?
-		api.beforeCreate = {
-			await withCheckedContinuation { continuation = $0 }
-		}
-		let model = SavedRoutesViewModel(api: api, tokens: Tokens())
-		let task = Task { await model.save(validInput) }
-		while continuation == nil { await Task.yield() }
-		#expect(model.isSaving)
-		#expect(await model.save(validInput) == false)
-		await model.load()
-		#expect(api.fetchedToken == nil)
-		#expect(api.createCount == 1)
-		continuation?.resume()
-		#expect(await task.value)
-		#expect(!model.isSaving)
-	}
-
-	@Test func sessionExpiryRemovesTokenAndReturnsToLogin() {
-		let tokens = Tokens()
-		let model = AuthViewModel(api: RouteTapTests.API(), tokens: tokens)
-		model.expireSession()
-		#expect(tokens.token == nil)
-		#expect(model.state == .signedOut)
-		#expect(model.errorMessage == "ログインの有効期限が切れました。再度ログインしてください。")
+	@Test func staleEditDoesNotResurrectDeletedRoute() async throws {
+		let store = TestRouteStore()
+		let model = SavedRoutesViewModel(store: store)
+		#expect(await model.save(input))
+		let deleted = try #require(model.routes.first)
+		store.routes = []
+		#expect(await model.save(input, editing: deleted) == false)
+		#expect(model.saveError == SavedRouteError.notFound.localizedDescription)
+		#expect(store.routes.isEmpty)
 	}
 }

@@ -67,7 +67,7 @@ struct GoogleMapsURLTests {
 		}
 	}
 	@Test func directionChangesBothDisplayLocationsAndSearchURL() throws {
-		let route = SavedRoute(id: 1, name: "通勤", origin: "大井町駅", destination: "浜松町駅")
+		let route = SavedRoute(id: UUID(), name: "通勤", origin: "大井町駅", destination: "浜松町駅")
 		for direction in RouteDirection.allCases {
 			let expectedOrigin = direction == .outbound ? "大井町駅" : "浜松町駅"
 			let expectedDestination = direction == .outbound ? "浜松町駅" : "大井町駅"

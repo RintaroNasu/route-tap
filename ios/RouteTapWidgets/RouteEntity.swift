@@ -22,10 +22,10 @@ struct RouteEntityQuery: EntityQuery {
 	func suggestedEntities() async throws -> [RouteEntity] { routes() }
 
 	private func routes() -> [RouteEntity] {
-		guard let snapshot = WidgetRouteStore().read() else { return [] }
-		return snapshot.routes.map {
+		guard let routes = try? SavedRouteStore().load() else { return [] }
+		return routes.map {
 			RouteEntity(
-				id: snapshot.entityID(for: $0), name: $0.name, origin: $0.origin,
+				id: $0.id.uuidString, name: $0.name, origin: $0.origin,
 				destination: $0.destination)
 		}
 	}

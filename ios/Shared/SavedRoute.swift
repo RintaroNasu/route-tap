@@ -1,13 +1,13 @@
 import Foundation
 
 struct SavedRoute: Codable, Identifiable, Equatable {
-	let id: UInt
+	let id: UUID
 	let name: String
 	let origin: String
 	let destination: String
 }
 
-struct SavedRouteInput: Encodable, Equatable {
+struct SavedRouteInput: Equatable {
 	var name = ""
 	var origin = ""
 	var destination = ""

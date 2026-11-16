@@ -6,58 +6,37 @@ final class SavedRoutesViewModel: ObservableObject {
 	@Published private(set) var routes: [SavedRoute] = []
 	@Published private(set) var isLoading = false
 	@Published private(set) var isSaving = false
-	@Published private(set) var deletingRouteID: UInt?
+	@Published private(set) var deletingRouteID: UUID?
 	@Published private(set) var deleteError: String?
 	@Published private(set) var hasLoaded = false
 	@Published private(set) var loadError: String?
 	@Published private(set) var saveError: String?
-	@Published private(set) var sessionExpired = false
 
 	var isBusy: Bool { isLoading || isSaving || deletingRouteID != nil }
+	private let store: any SavedRouteStoring
 
-	private let api: any SavedRouteServicing
-	private let tokens: any TokenStoring
-	private let accountID: String?
-	private let widgetStore: any WidgetRouteStoring
-
-	init(
-		api: any SavedRouteServicing = SavedRouteAPI(),
-		tokens: any TokenStoring = KeychainTokenStore(),
-		accountID: String? = nil,
-		widgetStore: any WidgetRouteStoring = WidgetRouteStore()
-	) {
-		self.api = api
-		self.tokens = tokens
-		self.accountID = accountID
-		self.widgetStore = widgetStore
-	}
+	init(store: any SavedRouteStoring = SavedRouteStore()) { self.store = store }
 
 	func load() async {
-		guard !isBusy, !sessionExpired else { return }
+		guard !isBusy else { return }
 		isLoading = true
 		loadError = nil
 		defer { isLoading = false }
 		do {
-			routes = try await api.fetchRoutes(token: token())
+			routes = try store.load()
 			hasLoaded = true
-			syncWidget()
-		} catch is CancellationError {
-			return
-		} catch SavedRouteError.unauthorized {
-			expireSession()
 		} catch {
 			loadError = error.localizedDescription
 		}
 	}
 
 	func save(_ input: SavedRouteInput, editing route: SavedRoute? = nil) async -> Bool {
-		guard !isBusy, !sessionExpired else { return false }
+		guard !isBusy else { return false }
 		saveError = nil
 		let input = SavedRouteInput(
 			name: input.name.trimmingCharacters(in: .whitespacesAndNewlines),
 			origin: input.origin.trimmingCharacters(in: .whitespacesAndNewlines),
-			destination: input.destination.trimmingCharacters(in: .whitespacesAndNewlines)
-		)
+			destination: input.destination.trimmingCharacters(in: .whitespacesAndNewlines))
 		if let message = validationMessage(for: input) {
 			saveError = message
 			return false
@@ -65,87 +44,50 @@ final class SavedRoutesViewModel: ObservableObject {
 		isSaving = true
 		defer { isSaving = false }
 		do {
+			var latest = try store.load()
+			let saved = SavedRoute(
+				id: route?.id ?? UUID(), name: input.name,
+				origin: input.origin, destination: input.destination)
 			if let route {
-				let updated = try await api.updateRoute(id: route.id, input: input, token: token())
-				if let index = routes.firstIndex(where: { $0.id == route.id }) {
-					routes[index] = updated
-				} else {
-					isSaving = false
-					await load()
+				guard let index = latest.firstIndex(where: { $0.id == route.id }) else {
+					throw SavedRouteError.notFound
 				}
+				latest[index] = saved
 			} else {
-				let created = try await api.createRoute(input: input, token: token())
-				routes.insert(created, at: 0)
-				hasLoaded = true
+				latest.insert(saved, at: 0)
 			}
-			syncWidget()
+			try store.save(latest)
+			routes = latest
+			hasLoaded = true
+			loadError = nil
 			return true
-		} catch is CancellationError {
-			return false
-		} catch SavedRouteError.unauthorized {
-			expireSession()
-		} catch SavedRouteError.notFound {
-			saveError = SavedRouteError.notFound.localizedDescription
-			if route != nil {
-				isSaving = false
-				await load()
-			}
 		} catch {
 			saveError = error.localizedDescription
+			return false
 		}
-		return false
 	}
 
 	func delete(_ route: SavedRoute) async -> Bool {
-		guard !isBusy, !sessionExpired else { return false }
+		guard !isBusy else { return false }
 		deletingRouteID = route.id
 		deleteError = nil
 		defer { deletingRouteID = nil }
 		do {
-			try await api.deleteRoute(id: route.id, token: token())
-			routes.removeAll { $0.id == route.id }
-			syncWidget()
+			var latest = try store.load()
+			latest.removeAll { $0.id == route.id }
+			try store.save(latest)
+			routes = latest
+			hasLoaded = true
+			loadError = nil
 			return true
-		} catch is CancellationError {
-			return false
-		} catch SavedRouteError.unauthorized {
-			expireSession()
-		} catch SavedRouteError.notFound {
-			deleteError = SavedRouteError.notFound.localizedDescription
-			deletingRouteID = nil
-			await load()
 		} catch {
 			deleteError = error.localizedDescription
+			return false
 		}
-		return false
 	}
 
 	func clearDeleteError() { deleteError = nil }
-
-	func clearSaveError() {
-		saveError = nil
-	}
-
-	private func token() throws -> String {
-		guard let token = try tokens.read(), !token.isEmpty else {
-			throw SavedRouteError.unauthorized
-		}
-		return token
-	}
-
-	private func syncWidget() {
-		guard let accountID else { return }
-		widgetStore.save(routes, accountID: accountID)
-	}
-
-	private func expireSession() {
-		if let accountID, widgetStore.read()?.accountID == accountID { widgetStore.clear() }
-		routes = []
-		loadError = nil
-		saveError = nil
-		deleteError = nil
-		sessionExpired = true
-	}
+	func clearSaveError() { saveError = nil }
 
 	private func validationMessage(for input: SavedRouteInput) -> String? {
 		if input.name.isEmpty { return "表示名を入力してください。" }

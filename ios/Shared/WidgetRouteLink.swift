@@ -1,8 +1,7 @@
 import Foundation
 
 struct WidgetRouteLink: Equatable {
-	let accountID: String
-	let routeID: UInt
+	let routeID: UUID
 	let direction: RouteDirection
 
 	var url: URL? {
@@ -10,15 +9,13 @@ struct WidgetRouteLink: Equatable {
 		components.scheme = "routetap"
 		components.host = "route"
 		components.queryItems = [
-			URLQueryItem(name: "account", value: accountID),
-			URLQueryItem(name: "id", value: String(routeID)),
+			URLQueryItem(name: "id", value: routeID.uuidString),
 			URLQueryItem(name: "direction", value: direction.rawValue),
 		]
 		return components.url
 	}
 
-	init(accountID: String, routeID: UInt, direction: RouteDirection) {
-		self.accountID = accountID
+	init(routeID: UUID, direction: RouteDirection) {
 		self.routeID = routeID
 		self.direction = direction
 	}
@@ -28,14 +25,13 @@ struct WidgetRouteLink: Equatable {
 			components.scheme == "routetap", components.host == "route",
 			components.path.isEmpty, components.user == nil, components.password == nil,
 			components.port == nil, components.fragment == nil,
-			let items = components.queryItems, items.count == 3,
-			Set(items.map(\.name)) == Set(["account", "id", "direction"]),
-			let accountID = items.first(where: { $0.name == "account" })?.value, !accountID.isEmpty,
+			let items = components.queryItems, items.count == 2,
+			Set(items.map(\.name)) == Set(["id", "direction"]),
 			let rawID = items.first(where: { $0.name == "id" })?.value,
-			let routeID = UInt(rawID), routeID > 0,
+			let routeID = UUID(uuidString: rawID),
 			let rawDirection = items.first(where: { $0.name == "direction" })?.value,
 			let direction = RouteDirection(rawValue: rawDirection)
 		else { return nil }
-		self.init(accountID: accountID, routeID: routeID, direction: direction)
+		self.init(routeID: routeID, direction: direction)
 	}
 }
