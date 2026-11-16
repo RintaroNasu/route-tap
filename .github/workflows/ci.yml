@@ -90,7 +90,7 @@ jobs:
           xcrun simctl bootstatus "$simulator_id" -b
 
       # testコマンドがアプリとテストをビルドし、両方のテストターゲットを実行する。
-      # Keychainを使うため、Simulator用のローカル署名を有効にする。
+      # App Groupsを利用するため、Simulator用のローカル署名を有効にする。
       - name: Build and test iOS
         run: |
           mkdir -p ci-results
