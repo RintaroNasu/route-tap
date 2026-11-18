@@ -70,7 +70,10 @@ final class SavedRoutesUITests: XCTestCase {
 		XCTAssertTrue(element("routes.card.\(id)", in: app).exists)
 		app.buttons["routes.menu.\(id)"].tap()
 		app.buttons["routes.delete.\(id)"].tap()
-		alert.buttons["routes.confirmDelete"].tap()
+		// 同じ削除ボタンが親子の要素として公開される場合も、1つを指定する。
+		let confirmDelete = alert.buttons.matching(identifier: "routes.confirmDelete").firstMatch
+		XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5))
+		confirmDelete.tap()
 		XCTAssertTrue(element("routes.empty", in: app).waitForExistence(timeout: 5))
 		app.terminate()
 		app.launch()
