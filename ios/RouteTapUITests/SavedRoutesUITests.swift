@@ -81,8 +81,6 @@ final class SavedRoutesUITests: XCTestCase {
 	private func launchIsolatedApp() -> XCUIApplication {
 		let app = XCUIApplication()
 		app.launchEnvironment["ROUTETAP_UI_TEST_STORE_ID"] = UUID().uuidString
-		// 旧接続先を指定しても通信せず、端末保存だけで利用できる。
-		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = "http://127.0.0.1:9"
 		app.launch()
 		XCTAssertTrue(app.staticTexts["routes.heading"].waitForExistence(timeout: 10))
 		return app
