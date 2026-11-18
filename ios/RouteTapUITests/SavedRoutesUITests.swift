@@ -70,7 +70,10 @@ final class SavedRoutesUITests: XCTestCase {
 		XCTAssertTrue(element("routes.card.\(id)", in: app).exists)
 		app.buttons["routes.menu.\(id)"].tap()
 		app.buttons["routes.delete.\(id)"].tap()
-		alert.buttons["routes.confirmDelete"].tap()
+		// 同じ削除ボタンが親子の要素として公開される場合も、1つを指定する。
+		let confirmDelete = alert.buttons.matching(identifier: "routes.confirmDelete").firstMatch
+		XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5))
+		confirmDelete.tap()
 		XCTAssertTrue(element("routes.empty", in: app).waitForExistence(timeout: 5))
 		app.terminate()
 		app.launch()
@@ -81,8 +84,6 @@ final class SavedRoutesUITests: XCTestCase {
 	private func launchIsolatedApp() -> XCUIApplication {
 		let app = XCUIApplication()
 		app.launchEnvironment["ROUTETAP_UI_TEST_STORE_ID"] = UUID().uuidString
-		// 旧接続先を指定しても通信せず、端末保存だけで利用できる。
-		app.launchEnvironment["ROUTETAP_API_BASE_URL"] = "http://127.0.0.1:9"
 		app.launch()
 		XCTAssertTrue(app.staticTexts["routes.heading"].waitForExistence(timeout: 10))
 		return app

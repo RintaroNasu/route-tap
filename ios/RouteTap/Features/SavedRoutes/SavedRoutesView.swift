@@ -3,6 +3,7 @@ import SwiftUI
 struct SavedRoutesView: View {
 	@StateObject private var viewModel = SavedRoutesViewModel()
 	@State private var activeForm: RouteForm?
+	@State private var showingAppInfo = false
 	@State private var routeToDelete: SavedRoute?
 	@State private var showingDeleteConfirmation = false
 	@State private var showingDeleteError = false
@@ -31,6 +32,7 @@ struct SavedRoutesView: View {
 		.refreshable {
 			await viewModel.load()
 		}
+		.sheet(isPresented: $showingAppInfo) { AppInfoView() }
 		.sheet(item: $activeForm) { form in
 			SavedRouteFormView(viewModel: viewModel, route: form.route)
 		}
@@ -66,6 +68,16 @@ struct SavedRoutesView: View {
 					.font(.headline.weight(.bold))
 					.foregroundStyle(.tint)
 				Spacer()
+				Button {
+					showingAppInfo = true
+				} label: {
+					Image(systemName: "info.circle")
+						.font(.system(size: 22))
+						.frame(width: 48, height: 48)
+						.contentShape(Rectangle())
+				}
+				.accessibilityLabel("RouteTapについて")
+				.accessibilityIdentifier("routes.appInfo")
 				Button {
 					activeForm = RouteForm(route: nil)
 				} label: {
