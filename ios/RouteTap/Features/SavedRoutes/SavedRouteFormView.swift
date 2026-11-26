@@ -3,14 +3,19 @@ import SwiftUI
 struct SavedRouteFormView: View {
 	@ObservedObject var viewModel: SavedRoutesViewModel
 	let route: SavedRoute?
+	let onCreated: (SavedRoute) -> Void
 	@Environment(\.dismiss) private var dismiss
 	@State private var input = SavedRouteInput()
 	@FocusState private var focusedField: Field?
 	private enum Field: String { case name, origin, destination }
 
-	init(viewModel: SavedRoutesViewModel, route: SavedRoute? = nil) {
+	init(
+		viewModel: SavedRoutesViewModel, route: SavedRoute? = nil,
+		onCreated: @escaping (SavedRoute) -> Void = { _ in }
+	) {
 		self.viewModel = viewModel
 		self.route = route
+		self.onCreated = onCreated
 		_input = State(
 			initialValue: SavedRouteInput(
 				name: route?.name ?? "",
@@ -107,7 +112,10 @@ struct SavedRouteFormView: View {
 		Button {
 			focusedField = nil
 			Task {
-				if await viewModel.save(input, editing: route) { dismiss() }
+				if await viewModel.save(input, editing: route) {
+					if route == nil, let created = viewModel.routes.first { onCreated(created) }
+					dismiss()
+				}
 			}
 		} label: {
 			HStack(spacing: 10) {

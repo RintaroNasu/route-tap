@@ -5,6 +5,7 @@ struct SavedRouteCard: View {
 	let actionsDisabled: Bool
 	let isDeleting: Bool
 	let onEdit: () -> Void
+	let onWidgetGuide: () -> Void
 	let onDelete: () -> Void
 	@State private var direction: RouteDirection = .outbound
 	@Environment(\.openURL) private var openURL
@@ -56,6 +57,10 @@ struct SavedRouteCard: View {
 		Menu {
 			Button(action: onEdit) { Label("編集", systemImage: "pencil") }
 				.accessibilityIdentifier("routes.edit.\(route.id)")
+			Button(action: onWidgetGuide) {
+				Label("ウィジェットの追加方法", systemImage: "rectangle.on.rectangle")
+			}
+			.accessibilityIdentifier("routes.widgetGuide.\(route.id)")
 			Button(role: .destructive, action: onDelete) { Label("削除", systemImage: "trash") }
 				.accessibilityIdentifier("routes.delete.\(route.id)")
 		} label: {

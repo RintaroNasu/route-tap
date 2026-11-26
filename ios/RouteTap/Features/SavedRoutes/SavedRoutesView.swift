@@ -4,6 +4,9 @@ struct SavedRoutesView: View {
 	@StateObject private var viewModel = SavedRoutesViewModel()
 	@State private var activeForm: RouteForm?
 	@State private var showingAppInfo = false
+	@AppStorage("hasShownWidgetIntroduction") private var hasShownWidgetIntroduction = false
+	@State private var pendingWidgetIntroduction: SavedRoute?
+	@State private var widgetGuide: WidgetGuideSheet?
 	@State private var routeToDelete: SavedRoute?
 	@State private var showingDeleteConfirmation = false
 	@State private var showingDeleteError = false
@@ -12,6 +15,24 @@ struct SavedRoutesView: View {
 	private struct RouteForm: Identifiable {
 		let id = UUID()
 		let route: SavedRoute?
+	}
+
+	private struct WidgetGuideSheet: Identifiable {
+		let id = UUID()
+		let route: SavedRoute?
+	}
+
+	init() {
+		// UIテストでは案内の表示履歴も分離する。
+		#if DEBUG
+			if let value = ProcessInfo.processInfo.environment["ROUTETAP_UI_TEST_STORE_ID"],
+				let id = UUID(uuidString: value),
+				let defaults = UserDefaults(suiteName: "widget-guide-test-\(id.uuidString)")
+			{
+				_hasShownWidgetIntroduction = AppStorage(
+					wrappedValue: false, "hasShownWidgetIntroduction", store: defaults)
+			}
+		#endif
 	}
 
 	var body: some View {
@@ -33,8 +54,13 @@ struct SavedRoutesView: View {
 			await viewModel.load()
 		}
 		.sheet(isPresented: $showingAppInfo) { AppInfoView() }
-		.sheet(item: $activeForm) { form in
-			SavedRouteFormView(viewModel: viewModel, route: form.route)
+		.sheet(item: $activeForm, onDismiss: presentWidgetIntroduction) { form in
+			SavedRouteFormView(viewModel: viewModel, route: form.route) { created in
+				if !hasShownWidgetIntroduction { pendingWidgetIntroduction = created }
+			}
+		}
+		.sheet(item: $widgetGuide) { guide in
+			WidgetGuideView(route: guide.route)
 		}
 		.alert("移動を削除しますか？", isPresented: $showingDeleteConfirmation, presenting: routeToDelete) {
 			route in
@@ -59,6 +85,13 @@ struct SavedRoutesView: View {
 		.onChange(of: scenePhase) { _, phase in
 			if phase == .active { Task { await viewModel.load() } }
 		}
+	}
+
+	private func presentWidgetIntroduction() {
+		guard let route = pendingWidgetIntroduction else { return }
+		pendingWidgetIntroduction = nil
+		hasShownWidgetIntroduction = true
+		widgetGuide = WidgetGuideSheet(route: route)
 	}
 
 	private var header: some View {
@@ -116,6 +149,7 @@ struct SavedRoutesView: View {
 						actionsDisabled: viewModel.isBusy,
 						isDeleting: viewModel.deletingRouteID == route.id,
 						onEdit: { activeForm = RouteForm(route: route) },
+						onWidgetGuide: { widgetGuide = WidgetGuideSheet(route: nil) },
 						onDelete: {
 							routeToDelete = route
 							showingDeleteConfirmation = true

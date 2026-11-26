@@ -18,6 +18,7 @@ final class SavedRoutesUITests: XCTestCase {
 		fillForm(in: app, name: "会社への移動", origin: "大井町駅", destination: "浜松町駅")
 		app.buttons["routes.save"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
 			.tap()
+		dismissWidgetIntroduction(in: app)
 		let card = firstCard(in: app)
 		XCTAssertTrue(card.waitForExistence(timeout: 5))
 		let id = card.identifier.replacingOccurrences(of: "routes.card.", with: "")
@@ -42,6 +43,7 @@ final class SavedRoutesUITests: XCTestCase {
 		app.buttons["routes.add"].tap()
 		fillForm(in: app, name: "通勤", origin: "大井町駅", destination: "浜松町駅")
 		app.buttons["routes.save"].tap()
+		dismissWidgetIntroduction(in: app)
 		let card = firstCard(in: app)
 		XCTAssertTrue(card.waitForExistence(timeout: 5))
 		let id = card.identifier.replacingOccurrences(of: "routes.card.", with: "")
@@ -78,6 +80,53 @@ final class SavedRoutesUITests: XCTestCase {
 		app.terminate()
 		app.launch()
 		XCTAssertTrue(element("routes.empty", in: app).waitForExistence(timeout: 10))
+	}
+
+	@MainActor
+	func testWidgetGuideAppearsOnceAndCanBeOpenedFromRouteMenu() throws {
+		let app = launchIsolatedApp()
+		app.buttons["routes.add"].tap()
+		fillForm(in: app, name: "通勤", origin: "大井町駅", destination: "浜松町駅")
+		app.buttons["routes.save"].tap()
+		XCTAssertTrue(app.staticTexts["widgetGuide.saved"].waitForExistence(timeout: 5))
+		XCTAssertEqual(app.staticTexts["widgetGuide.previewName"].label, "通勤")
+		attach(app, name: "保存後のウィジェット案内")
+		app.buttons["widgetGuide.showSteps"].tap()
+		XCTAssertTrue(app.staticTexts["widgetGuide.heading"].waitForExistence(timeout: 5))
+		XCTAssertTrue(app.images["widgetGuide.image.1"].exists)
+		attach(app, name: "ウィジェット追加手順・上部")
+		let lastImage = app.images["widgetGuide.image.3"]
+		for _ in 0..<5 {
+			if lastImage.isHittable { break }
+			app.swipeUp()
+		}
+		XCTAssertTrue(lastImage.isHittable)
+		attach(app, name: "ウィジェット追加手順・下部")
+		app.buttons["widgetGuide.done"].tap()
+		XCTAssertTrue(app.buttons["routes.add"].waitForExistence(timeout: 5))
+
+		// 表示履歴は再起動後も保持し、2件目では案内を出さない。
+		app.terminate()
+		app.launch()
+		XCTAssertTrue(app.buttons["routes.add"].waitForExistence(timeout: 10))
+		app.buttons["routes.add"].tap()
+		fillForm(in: app, name: "休日", origin: "新宿駅", destination: "渋谷駅")
+		app.buttons["routes.save"].tap()
+		XCTAssertTrue(app.staticTexts["休日"].waitForExistence(timeout: 5))
+		XCTAssertFalse(app.staticTexts["widgetGuide.saved"].exists)
+		let id = firstCard(in: app).identifier.replacingOccurrences(of: "routes.card.", with: "")
+		app.buttons["routes.menu.\(id)"].tap()
+		app.buttons["routes.widgetGuide.\(id)"].tap()
+		XCTAssertTrue(app.staticTexts["widgetGuide.heading"].waitForExistence(timeout: 5))
+		XCTAssertFalse(app.staticTexts["widgetGuide.saved"].exists)
+		app.buttons["widgetGuide.close"].tap()
+		XCTAssertTrue(app.buttons["routes.add"].waitForExistence(timeout: 5))
+	}
+
+	@MainActor
+	private func dismissWidgetIntroduction(in app: XCUIApplication) {
+		XCTAssertTrue(app.staticTexts["widgetGuide.saved"].waitForExistence(timeout: 5))
+		app.buttons["widgetGuide.later"].tap()
 	}
 
 	@MainActor
