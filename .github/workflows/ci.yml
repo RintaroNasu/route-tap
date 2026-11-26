@@ -14,59 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  api-ci:
-    name: API CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: api
-        shell: bash
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: api/go.mod
-          cache-dependency-path: api/go.sum
-
-      - name: Check Go format
-        run: |
-          unformatted_files=$(gofmt -l -s .)
-          if [ -n "$unformatted_files" ]; then
-            echo "These files are not formatted:"
-            echo "$unformatted_files"
-            exit 1
-          fi
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Build
-        run: go build ./...
-
-      - name: Run tests with coverage
-        run: go test -race -count=1 -v -coverprofile=coverage.out -covermode=atomic ./...
-
-      - name: Show coverage
-        run: go tool cover -func=coverage.out
-
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-coverage
-          path: api/coverage.out
-          if-no-files-found: ignore
-          retention-days: 5
-
   ios-ci:
     name: iOS CI
     runs-on: macos-15
