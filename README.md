@@ -31,24 +31,30 @@
     <th>移動の登録</th>
   </tr>
   <tr>
-    <td>スクリーンショットを追加予定</td>
-    <td>スクリーンショットを追加予定</td>
+    <td><img width="300" alt="Screenshot iPhone 16 2026-11-27 at 0 10 35" src="https://github.com/user-attachments/assets/e3fe8af0-239a-4b1a-9406-28eccdc7d514" />
+</td>
+    <td><img width="300" alt="Screenshot iPhone 16 2026-11-27 at 0 11 07" src="https://github.com/user-attachments/assets/cdac57f4-a028-48a5-b55d-a7d8471eb95f" />
+    </td>
   </tr>
   <tr>
     <th>移動の編集</th>
     <th>往路・復路の切り替え</th>
   </tr>
   <tr>
-    <td>スクリーンショットを追加予定</td>
-    <td>スクリーンショットを追加予定</td>
+    <td><img width="300" alt="Screenshot iPhone 16 2026-11-27 at 0 11 47" src="https://github.com/user-attachments/assets/b96da7b2-a3fa-4e62-8bbd-7f9ca883b82e" />
+</td>
+    <td><img width="300" alt="Screenshot iPhone 16 2026-11-27 at 0 12 03" src="https://github.com/user-attachments/assets/b9c6f3c9-0e84-4bcd-b8ab-8c3ced3c2ea9" />
+</td>
   </tr>
   <tr>
     <th>ホーム画面のウィジェット</th>
     <th>ウィジェット追加ガイド</th>
   </tr>
   <tr>
-    <td>スクリーンショットを追加予定</td>
-    <td>スクリーンショットを追加予定</td>
+    <td><img width="300" alt="Screenshot iPhone 16 2026-11-27 at 0 12 39" src="https://github.com/user-attachments/assets/fe8e2139-8215-4504-962a-05527c88da6b" />
+</td>
+    <td><img width="300" alt="Screenshot iPhone 16 2026-11-27 at 0 13 21" src="https://github.com/user-attachments/assets/b700f26a-e55c-4960-893f-f79c3df0080d" />
+</td>
   </tr>
 </table>
 
